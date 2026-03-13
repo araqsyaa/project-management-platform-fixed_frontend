@@ -16,22 +16,20 @@ import {
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { Avatar, AvatarFallback } from './ui/avatar';
-import { notifications as mockNotifications } from '../data/mockData';
 
 export default function Layout() {
-  const { user, logout, isAuthenticated } = useAuth();
+  const { user, logout, isAuthenticated, loading } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
-  // Redirect to login if not authenticated
   useEffect(() => {
-    if (!isAuthenticated) {
+    if (!loading && !isAuthenticated) {
       navigate('/login');
     }
-  }, [isAuthenticated, navigate]);
+  }, [isAuthenticated, loading, navigate]);
 
-  const unreadCount = mockNotifications.filter(n => !n.read).length;
+  const unreadCount = 0;
 
   const handleLogout = () => {
     logout();
@@ -45,6 +43,9 @@ export default function Layout() {
     { path: '/reports', icon: FileText, label: t.reports },
     { path: '/settings', icon: Settings, label: t.settings },
   ];
+
+  if (loading) return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
+  if (!isAuthenticated) return null;
 
   return (
     <div className="min-h-screen bg-background">

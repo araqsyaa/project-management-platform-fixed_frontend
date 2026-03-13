@@ -5,9 +5,12 @@ import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { FileSpreadsheet, FileText, Download } from 'lucide-react';
-import { projects, tasks, teams } from '../data/mockData';
+import { useProjects, useTasks, useTeams } from '../api/useApi';
 
 export default function ReportsPage() {
+  const { projects, loading: projectsLoading } = useProjects();
+  const { tasks } = useTasks();
+  const { teams } = useTeams();
   const [selectedProject, setSelectedProject] = useState<string>('all');
   const [selectedTeam, setSelectedTeam] = useState<string>('all');
 
@@ -28,6 +31,8 @@ export default function ReportsPage() {
     name: p.title.length > 20 ? p.title.substring(0, 20) + '...' : p.title,
     progress: p.progress
   }));
+
+  if (projectsLoading) return <div className="p-8">Loading...</div>;
 
   const completionTrend = [
     { week: 'Week 1', completed: 5, planned: 8 },
@@ -89,7 +94,7 @@ export default function ReportsPage() {
           <SelectContent>
             <SelectItem value="all">All Teams</SelectItem>
             {teams.map(team => (
-              <SelectItem key={team.id} value={team.id}>{team.name}</SelectItem>
+              <SelectItem key={team.id} value={String(team.id)}>{team.name}</SelectItem>
             ))}
           </SelectContent>
         </Select>

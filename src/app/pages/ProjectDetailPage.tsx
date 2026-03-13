@@ -13,7 +13,9 @@ import { Textarea } from '../components/ui/textarea';
 import { DndProvider, useDrag, useDrop } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
 import { Calendar, Clock, User, Plus, CheckCircle2, Edit } from 'lucide-react';
-import { projects, tasks, milestones, users, Task, TaskStatus, Comment } from '../data/mockData';
+import { Task, TaskStatus, Comment } from '../data/mockData';
+import { useProjects, useTasks, useMilestones, useUsers } from '../api/useApi';
+import { useAuth } from '../context/AuthContext';
 import { toast } from 'sonner';
 
 const TASK_TYPE = 'TASK';
@@ -23,7 +25,7 @@ interface DragItem {
   status: TaskStatus;
 }
 
-function TaskCard({ task, onClick }: { task: Task; onClick: () => void }) {
+function TaskCard({ task, onClick, users }: { task: Task; onClick: () => void; users: { id: string; name: string }[] }) {
   const [{ isDragging }, drag] = useDrag<DragItem, unknown, { isDragging: boolean }>({
     type: TASK_TYPE,
     item: { id: task.id, status: task.status },
@@ -32,7 +34,7 @@ function TaskCard({ task, onClick }: { task: Task; onClick: () => void }) {
     }),
   });
 
-  const assignee = users.find(u => u.id === task.assigneeId);
+  const assignee = users.find((u: { id: string }) => u.id === task.assigneeId);
   
   const getPriorityColor = (priority: string) => {
     switch (priority) {
@@ -97,7 +99,8 @@ function KanbanColumn({
   tasks, 
   onDrop,
   onTaskClick,
-  onAddTask
+  onAddTask,
+  users
 }: { 
   status: TaskStatus; 
   title: string; 
@@ -105,6 +108,7 @@ function KanbanColumn({
   onDrop: (taskId: string, newStatus: TaskStatus) => void;
   onTaskClick: (task: Task) => void;
   onAddTask: (status: TaskStatus) => void;
+  users: { id: string; name: string }[];
 }) {
   const [{ isOver }, drop] = useDrop<DragItem, unknown, { isOver: boolean }>({
     accept: TASK_TYPE,
@@ -162,6 +166,7 @@ function KanbanColumn({
             key={task.id} 
             task={task} 
             onClick={() => onTaskClick(task)}
+            users={users}
           />
         ))}
         {tasks.length === 0 && (
@@ -179,8 +184,14 @@ function KanbanColumn({
 
 export default function ProjectDetailPage() {
   const { projectId } = useParams();
+  const { user: currentUser } = useAuth();
+  const { projects, loading: projectsLoading } = useProjects();
+  const { tasks: apiTasks, loading: tasksLoading } = useTasks(projectId || '');
+  const { milestones: projectMilestones } = useMilestones(projectId || '');
+  const { users } = useUsers();
+
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
-  const [projectTasks, setProjectTasks] = useState(tasks.filter(t => t.projectId === projectId));
+  const [projectTasks, setProjectTasks] = useState<Task[]>([]);
   const [taskComments, setTaskComments] = useState<Record<string, Comment[]>>({});
   const [newComment, setNewComment] = useState('');
   const [isAddTaskDialogOpen, setIsAddTaskDialogOpen] = useState(false);
@@ -199,11 +210,13 @@ export default function ProjectDetailPage() {
   const [editDueDate, setEditDueDate] = useState('');
 
   const project = projects.find(p => p.id === projectId);
-  const projectMilestones = milestones.filter(m => m.projectId === projectId);
 
-  if (!project) {
-    return <div>Project not found</div>;
-  }
+  useEffect(() => {
+    setProjectTasks(apiTasks);
+  }, [apiTasks]);
+
+  if (projectsLoading || !projectId) return <div className="p-8">Loading...</div>;
+  if (!project) return <div className="p-8">Project not found</div>;
 
   const handleTaskDrop = (taskId: string, newStatus: TaskStatus) => {
     setProjectTasks(prev =>
@@ -289,7 +302,7 @@ export default function ProjectDetailPage() {
       description: newTaskDescription,
       status: newTaskStatus,
       priority: newTaskPriority as 'high' | 'medium' | 'low',
-      assigneeId: newTaskAssignee || users[0].id,
+      assigneeId: newTaskAssignee || users[0]?.id || '',
       projectId: projectId || '',
       dueDate: newTaskDueDate || new Date().toISOString().split('T')[0],
       createdAt: new Date().toISOString()
@@ -396,6 +409,7 @@ export default function ProjectDetailPage() {
                   onDrop={handleTaskDrop}
                   onTaskClick={setSelectedTask}
                   onAddTask={handleAddTask}
+                  users={users}
                 />
               ))}
             </div>

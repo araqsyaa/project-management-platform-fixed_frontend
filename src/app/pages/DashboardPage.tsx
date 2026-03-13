@@ -4,15 +4,18 @@ import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import { Button } from '../components/ui/button';
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { FolderKanban, ListTodo, Flag, TrendingUp, ArrowRight } from 'lucide-react';
-import { projects, tasks, milestones, activityFeed } from '../data/mockData';
+import { activityFeed } from '../data/mockData';
 import { useNavigate } from 'react-router';
+import { useProjects, useTasks } from '../api/useApi';
 
 export default function DashboardPage() {
   const navigate = useNavigate();
+  const { projects, loading } = useProjects();
+  const { tasks } = useTasks();
 
   const totalProjects = projects.length;
   const activeTasks = tasks.filter(t => t.status === 'in_progress' || t.status === 'review').length;
-  const upcomingMilestones = milestones.filter(m => !m.completed).length;
+  const upcomingMilestones = 0;
 
   const activityData = [
     { name: 'Mon', tasks: 8 },
@@ -178,7 +181,7 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {projects.filter(p => p.status === 'active').slice(0, 4).map((project) => (
+              {projects.slice(0, 4).map((project) => (
                 <div 
                   key={project.id} 
                   className="p-4 rounded-lg cursor-pointer hover:opacity-80 transition-opacity"

@@ -1,30 +1,29 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router';
 import { useAuth } from '../context/AuthContext';
-import { t } from '../i18n/translations';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
-import { Checkbox } from '../components/ui/checkbox';
 
-export default function LoginPage() {
+export default function RegisterPage() {
+  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
-  const { login } = useAuth();
+  const { register } = useAuth();
 
-  const handleLogin = async (e: React.FormEvent) => {
+  const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setLoading(true);
     try {
-      const ok = await login(email, password);
+      const ok = await register(name, email, password);
       if (ok) {
         navigate('/dashboard');
       } else {
-        setError(t.loginError);
+        setError('Registration failed. Email may already exist.');
       }
     } finally {
       setLoading(false);
@@ -36,14 +35,27 @@ export default function LoginPage() {
       <div className="w-full max-w-md p-8 space-y-6">
         <div className="text-center space-y-2">
           <h1 className="text-3xl" style={{ color: '#6246EA' }}>
-            Project Management Platform
+            Create Account
           </h1>
-          <p className="text-foreground/70">{t.welcome}</p>
+          <p className="text-foreground/70">Register for Project Management Platform</p>
         </div>
 
-        <form onSubmit={handleLogin} className="space-y-4">
+        <form onSubmit={handleRegister} className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="email">{t.email}</Label>
+            <Label htmlFor="name">Name</Label>
+            <Input
+              id="name"
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              required
+              className="border-[#2B2C34]/20"
+              placeholder="Your name"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="email">Email</Label>
             <Input
               id="email"
               type="email"
@@ -51,20 +63,21 @@ export default function LoginPage() {
               onChange={(e) => setEmail(e.target.value)}
               required
               className="border-[#2B2C34]/20"
-              placeholder={t.email}
+              placeholder="you@example.com"
             />
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="password">{t.password}</Label>
+            <Label htmlFor="password">Password</Label>
             <Input
               id="password"
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
+              minLength={4}
               className="border-[#2B2C34]/20"
-              placeholder={t.password}
+              placeholder="Min 4 characters"
             />
           </div>
 
@@ -74,24 +87,15 @@ export default function LoginPage() {
             </div>
           )}
 
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-2">
-              <Checkbox id="remember" />
-              <label htmlFor="remember" className="text-sm text-foreground/70">
-                {t.rememberMe}
-              </label>
-            </div>
-          </div>
-
           <Button type="submit" className="w-full" disabled={loading}>
-            {loading ? 'Logging in...' : t.login}
+            {loading ? 'Creating account...' : 'Register'}
           </Button>
         </form>
 
         <p className="text-center text-sm text-foreground/70">
-          Don&apos;t have an account?{' '}
-          <Link to="/register" style={{ color: '#6246EA', fontWeight: 500 }}>
-            Register
+          Already have an account?{' '}
+          <Link to="/login" style={{ color: '#6246EA', fontWeight: 500 }}>
+            Login
           </Link>
         </p>
       </div>

@@ -6,10 +6,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import { Badge } from '../components/ui/badge';
 import { Avatar, AvatarFallback } from '../components/ui/avatar';
 import { Plus, Search, Edit, Trash2 } from 'lucide-react';
-import { users, Role } from '../data/mockData';
+import { Role } from '../data/mockData';
+import { useUsers } from '../api/useApi';
 
 export default function UsersPage() {
   const [searchQuery, setSearchQuery] = useState('');
+  const { users, loading, error } = useUsers();
 
   const filteredUsers = users.filter(user =>
     user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -35,6 +37,9 @@ export default function UsersPage() {
       default: return role;
     }
   };
+
+  if (loading) return <div className="p-8">Loading...</div>;
+  if (error) return <div className="p-8 text-red-500">Error: {error}</div>;
 
   return (
     <div className="space-y-6">

@@ -7,12 +7,14 @@ import { Card, CardContent } from '../components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Badge } from '../components/ui/badge';
 import { Plus, Search, Filter } from 'lucide-react';
-import { projects, teams } from '../data/mockData';
+import { useProjects, useTeams } from '../api/useApi';
 
 export default function ProjectsPage() {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
   const [filterTeam, setFilterTeam] = useState<string>('all');
+  const { projects, loading: projectsLoading, error: projectsError } = useProjects();
+  const { teams, loading: teamsLoading } = useTeams();
 
   const filteredProjects = projects.filter(project => {
     const matchesSearch = project.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -31,8 +33,11 @@ export default function ProjectsPage() {
   };
 
   const getTeamName = (teamId: string) => {
-    return teams.find(t => t.id === teamId)?.name || 'Unknown Team';
+    return teams.find(team => String(team.id) === teamId)?.name || 'Unknown Team';
   };
+
+  if (projectsLoading) return <div className="p-8">Loading...</div>;
+  if (projectsError) return <div className="p-8 text-red-500">Error: {projectsError}</div>;
 
   return (
     <div className="space-y-6">
@@ -63,7 +68,7 @@ export default function ProjectsPage() {
           <SelectContent>
             <SelectItem value="all">All Teams</SelectItem>
             {teams.map(team => (
-              <SelectItem key={team.id} value={team.id}>{team.name}</SelectItem>
+              <SelectItem key={team.id} value={String(team.id)}>{team.name}</SelectItem>
             ))}
           </SelectContent>
         </Select>
