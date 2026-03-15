@@ -16,17 +16,16 @@ export default function SettingsPage() {
   const { user } = useAuth();
   const [name, setName] = useState(user?.name || '');
   const [email, setEmail] = useState(user?.email || '');
-  const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const isProfileDirty = user
     ? name !== user.name || email !== user.email
     : false;
 
   const isChangePasswordValid =
-    currentPassword.length > 0 &&
     newPassword.length > 0 &&
     confirmPassword.length > 0 &&
     newPassword === confirmPassword;
@@ -57,7 +56,6 @@ export default function SettingsPage() {
       style: { backgroundColor: '#2CB67D', color: '#FFFFFE' },
     });
 
-    setCurrentPassword('');
     setNewPassword('');
     setConfirmPassword('');
   };
@@ -132,51 +130,63 @@ export default function SettingsPage() {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="current-password">Current Password</Label>
+            <Label htmlFor="new-password">New Password</Label>
             <div className="relative">
               <Input
-                id="current-password"
-                type={showCurrentPassword ? "text" : "password"}
-                value={currentPassword}
-                onChange={(e) => setCurrentPassword(e.target.value)}
+                id="new-password"
+                type={showNewPassword ? "text" : "password"}
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                onFocus={() => setShowNewPassword(true)}
+                onBlur={() => setShowNewPassword(false)}
                 className="border-foreground/20 pr-10"
               />
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
-                onClick={() => setShowCurrentPassword(!showCurrentPassword)}
-              >
-                {showCurrentPassword ? (
-                  <EyeOff className="h-4 w-4 text-foreground/60" />
-                ) : (
-                  <Eye className="h-4 w-4 text-foreground/60" />
-                )}
-              </Button>
+              {newPassword && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                  onClick={() => setShowNewPassword(!showNewPassword)}
+                >
+                  {showNewPassword ? (
+                    <EyeOff className="h-4 w-4 text-foreground/60" />
+                  ) : (
+                    <Eye className="h-4 w-4 text-foreground/60" />
+                  )}
+                </Button>
+              )}
             </div>
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="new-password">New Password</Label>
-            <Input
-              id="new-password"
-              type="password"
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-              className="border-foreground/20"
-            />
-          </div>
-
-          <div className="space-y-2">
             <Label htmlFor="confirm-password">Confirm New Password</Label>
-            <Input
-              id="confirm-password"
-              type="password"
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              className="border-foreground/20"
-            />
+            <div className="relative">
+              <Input
+                id="confirm-password"
+                type={showConfirmPassword ? "text" : "password"}
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                onFocus={() => setShowConfirmPassword(true)}
+                onBlur={() => setShowConfirmPassword(false)}
+                className="border-foreground/20 pr-10"
+              />
+              {confirmPassword && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                >
+                  {showConfirmPassword ? (
+                    <EyeOff className="h-4 w-4 text-foreground/60" />
+                  ) : (
+                    <Eye className="h-4 w-4 text-foreground/60" />
+                  )}
+                </Button>
+              )}
+            </div>
           </div>
 
           <Button onClick={handleChangePassword} disabled={!isChangePasswordValid}>
