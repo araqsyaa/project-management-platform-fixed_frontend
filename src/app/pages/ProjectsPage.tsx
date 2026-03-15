@@ -16,7 +16,18 @@ export default function ProjectsPage() {
   const { projects, loading: projectsLoading, error: projectsError } = useProjects();
   const { teams, loading: teamsLoading } = useTeams();
 
-  const filteredProjects = projects.filter(project => {
+  const [projectList, setProjectList] = useState(projects);
+  const [isCreateProjectOpen, setIsCreateProjectOpen] = useState(false);
+  const [newProjectTitle, setNewProjectTitle] = useState('');
+  const [newProjectTeam, setNewProjectTeam] = useState('');
+  const [newProjectClient, setNewProjectClient] = useState('');
+  const [newProjectDeadline, setNewProjectDeadline] = useState('');
+
+  React.useEffect(() => {
+    setProjectList(projects);
+  }, [projects]);
+
+  const filteredProjects = projectList.filter(project => {
     const matchesSearch = project.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
                          project.client?.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesTeam = filterTeam === 'all' || project.teamId === filterTeam;
@@ -36,6 +47,29 @@ export default function ProjectsPage() {
     return teams.find(team => String(team.id) === teamId)?.name || 'Unknown Team';
   };
 
+  const handleCreateProject = () => {
+    if (!newProjectTitle.trim()) {
+      return;
+    }
+
+    const newProj = {
+      id: `project-${Date.now()}`,
+      title: newProjectTitle,
+      teamId: newProjectTeam || (teams[0]?.id ? String(teams[0].id) : ''),
+      progress: 0,
+      deadline: newProjectDeadline || new Date().toISOString().split('T')[0],
+      status: 'active',
+      client: newProjectClient,
+    };
+
+    setProjectList((prev) => [newProj, ...prev]);
+    setIsCreateProjectOpen(false);
+    setNewProjectTitle('');
+    setNewProjectTeam('');
+    setNewProjectClient('');
+    setNewProjectDeadline('');
+  };
+
   if (projectsLoading) return <div className="p-8">Loading...</div>;
   if (projectsError) return <div className="p-8 text-red-500">Error: {projectsError}</div>;
 
@@ -43,7 +77,7 @@ export default function ProjectsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-3xl">{t.projects}</h1>
-        <Button>
+        <Button onClick={() => setIsCreateProjectOpen(true)}>
           <Plus className="mr-2 h-4 w-4" />
           {t.createProject}
         </Button>
@@ -137,6 +171,69 @@ export default function ProjectsPage() {
       {filteredProjects.length === 0 && (
         <div className="text-center py-12">
           <p className="text-foreground/60">{t.noData}</p>
+        </div>
+      )}
+
+      {/* Create Project Modal */}
+      {isCreateProjectOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
+          <div className="w-full max-w-md rounded-xl bg-background p-6 shadow-lg">
+            <h2 className="text-lg font-semibold mb-4">{t.createProject}</h2>
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">{t.projectTitle}</label>
+                <Input
+                  value={newProjectTitle}
+                  onChange={(e) => setNewProjectTitle(e.target.value)}
+                  placeholder="Enter project title"
+                  className="border-foreground/20"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium">{t.assignedTeam}</label>
+                <Select value={newProjectTeam} onValueChange={setNewProjectTeam}>
+                  <SelectTrigger className="border-foreground/20">
+                    <SelectValue placeholder="Select a team" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {teams.map((team) => (
+                      <SelectItem key={team.id} value={String(team.id)}>
+                        {team.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Client</label>
+                <Input
+                  value={newProjectClient}
+                  onChange={(e) => setNewProjectClient(e.target.value)}
+                  placeholder="Enter client name"
+                  className="border-foreground/20"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium">{t.deadline}</label>
+                <Input
+                  type="date"
+                  value={newProjectDeadline}
+                  onChange={(e) => setNewProjectDeadline(e.target.value)}
+                  className="border-foreground/20"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <Button variant="outline" onClick={() => setIsCreateProjectOpen(false)}>
+                  {t.cancel}
+                </Button>
+                <Button onClick={handleCreateProject}>{t.create}</Button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>
