@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Badge } from '../components/ui/badge';
 import { Plus, Search, Filter } from 'lucide-react';
 import { useProjects, useTeams } from '../api/useApi';
+import { api } from '../api/client';
 
 export default function ProjectsPage() {
   const navigate = useNavigate();
@@ -47,27 +48,39 @@ export default function ProjectsPage() {
     return teams.find(team => String(team.id) === teamId)?.name || 'Unknown Team';
   };
 
-  const handleCreateProject = () => {
+  const handleCreateProject = async () => {
     if (!newProjectTitle.trim()) {
       return;
     }
 
-    const newProj = {
-      id: `project-${Date.now()}`,
-      title: newProjectTitle,
-      teamId: newProjectTeam || (teams[0]?.id ? String(teams[0].id) : ''),
-      progress: 0,
-      deadline: newProjectDeadline || new Date().toISOString().split('T')[0],
-      status: 'active',
-      client: newProjectClient,
-    };
+    try {
+      const teamId = newProjectTeam || (teams[0]?.id ? String(teams[0].id) : '');
+      const res = await api.createProject({
+        name: newProjectTitle,
+        description: newProjectClient,
+        teamId,
+        endDate: newProjectDeadline || undefined,
+      });
 
-    setProjectList((prev) => [newProj, ...prev]);
-    setIsCreateProjectOpen(false);
-    setNewProjectTitle('');
-    setNewProjectTeam('');
-    setNewProjectClient('');
-    setNewProjectDeadline('');
+      const created = {
+        id: String(res.id),
+        title: res.name,
+        teamId: teamId,
+        progress: 0,
+        deadline: res.endDate || newProjectDeadline || new Date().toISOString().split('T')[0],
+        status: 'active' as const,
+        client: newProjectClient,
+      };
+
+      setProjectList((prev) => [created, ...prev]);
+      setIsCreateProjectOpen(false);
+      setNewProjectTitle('');
+      setNewProjectTeam('');
+      setNewProjectClient('');
+      setNewProjectDeadline('');
+    } catch (e) {
+      console.error(e);
+    }
   };
 
   if (projectsLoading) return <div className="p-8">Loading...</div>;

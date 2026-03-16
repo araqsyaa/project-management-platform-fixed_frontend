@@ -49,16 +49,29 @@ export const api = {
         method: 'POST',
         body: JSON.stringify({ email, password }),
       }),
-    register: (name: string, email: string, password: string) =>
+    register: (name: string, email: string, password: string, role?: string) =>
       request<{ user: ApiUser; token: string }>('/auth/register', {
         method: 'POST',
-        body: JSON.stringify({ name, email, password }),
+        body: JSON.stringify(
+          role ? { name, email, password, role } : { name, email, password },
+        ),
       }),
   },
   users: () => request<ApiUser[]>('/users'),
   teams: () => request<ApiTeam[]>('/teams'),
   projects: () => request<ApiProject[]>('/projects'),
   project: (id: string) => request<ApiProject>(`/projects/${id}`),
+  createProject: (payload: { name: string; description?: string; teamId?: string; startDate?: string; endDate?: string }) =>
+    request<ApiProject>('/projects', {
+      method: 'POST',
+      body: JSON.stringify({
+        name: payload.name,
+        description: payload.description ?? '',
+        startDate: payload.startDate ?? null,
+        endDate: payload.endDate ?? null,
+        team: payload.teamId ? { id: Number(payload.teamId) } : undefined,
+      }),
+    }),
   tasks: () => request<ApiTask[]>('/tasks'),
   projectTasks: (projectId: string) => request<ApiTask[]>(`/projects/${projectId}/tasks`),
   milestones: (projectId: string) => request<ApiMilestone[]>(`/projects/${projectId}/milestones`),

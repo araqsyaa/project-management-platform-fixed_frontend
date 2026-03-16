@@ -8,6 +8,7 @@ import { Avatar, AvatarFallback } from '../components/ui/avatar';
 import { Plus, Search, Edit, Trash2 } from 'lucide-react';
 import { Role, User } from '../data/mockData';
 import { useUsers } from '../api/useApi';
+import { api } from '../api/client';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/ui/dialog';
 import { Label } from '../components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
@@ -51,21 +52,37 @@ export default function UsersPage() {
     }
   };
 
-  const handleCreateUser = () => {
+  const handleCreateUser = async () => {
     if (!newUserName.trim() || !newUserEmail.trim()) return;
 
-    const newUser: User = {
-      id: `user-${Date.now()}`,
-      name: newUserName,
-      email: newUserEmail,
-      role: newUserRole,
-    };
+    try {
+      const backendRoleMap: Record<Role, string> = {
+        administrator: 'ADMIN',
+        project_manager: 'PROJECT_MANAGER',
+        team_member: 'TEAM_MEMBER',
+        viewer: 'VIEWER',
+      };
 
-    setUserList((prev) => [newUser, ...prev]);
-    setIsAddUserOpen(false);
-    setNewUserName('');
-    setNewUserEmail('');
-    setNewUserRole('team_member');
+      const backendRole = backendRoleMap[newUserRole] ?? 'TEAM_MEMBER';
+
+      const res = await api.auth.register(newUserName, newUserEmail, 'password1234', backendRole);
+
+      const created: User = {
+        id: String(res.user.id),
+        name: res.user.name,
+        email: res.user.email,
+        role: newUserRole,
+      };
+
+      setUserList((prev) => [created, ...prev]);
+      setIsAddUserOpen(false);
+      setNewUserName('');
+      setNewUserEmail('');
+      setNewUserRole('team_member');
+    } catch (e) {
+      // In a real app, show a toast; for now, keep it simple
+      console.error(e);
+    }
   };
 
   if (loading) return <div className="p-8">Loading...</div>;
