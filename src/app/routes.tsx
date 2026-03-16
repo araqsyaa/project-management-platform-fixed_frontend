@@ -4,6 +4,7 @@ import RegisterPage from './pages/RegisterPage';
 import DashboardPage from './pages/DashboardPage';
 import ProjectsPage from './pages/ProjectsPage';
 import ProjectDetailPage from './pages/ProjectDetailPage';
+import MilestoneDetailPage from './pages/MilestoneDetailPage';
 import UsersPage from './pages/UsersPage';
 import ReportsPage from './pages/ReportsPage';
 import NotificationsPage from './pages/NotificationsPage';
@@ -38,6 +39,14 @@ export const router = createBrowserRouter([
       {
         path: 'projects/:projectId',
         element: <ProjectDetailPage />,
+      },
+      {
+        path: 'projects/:projectId/milestones/new',
+        element: <MilestoneDetailPage />,
+      },
+      {
+        path: 'projects/:projectId/milestones/:milestoneId',
+        element: <MilestoneDetailPage />,
       },
       {
         path: 'users',

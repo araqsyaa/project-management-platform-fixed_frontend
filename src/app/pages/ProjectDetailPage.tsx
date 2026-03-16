@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams } from 'react-router';
+import { useParams, useSearchParams, useNavigate, Link } from 'react-router';
 import { t } from '../i18n/translations';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
@@ -188,6 +188,9 @@ function Column({
 
 export default function ProjectDetailPage() {
   const { projectId } = useParams();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const tabFromUrl = searchParams.get('tab') === 'milestones' ? 'milestones' : 'kanban';
   const { projects, loading: projectsLoading } = useProjects();
   const { tasks: apiTasks, loading: tasksLoading } = useTasks(projectId || '');
   const { milestones, loading: milestonesLoading } = useMilestones(projectId || '');
@@ -408,7 +411,13 @@ export default function ProjectDetailPage() {
         </div>
 
         {/* Tabs */}
-        <Tabs defaultValue="kanban" className="w-full">
+        <Tabs
+          value={tabFromUrl}
+          onValueChange={(v) =>
+            navigate(`/projects/${projectId}${v === 'milestones' ? '?tab=milestones' : ''}`)
+          }
+          className="w-full"
+        >
           <TabsList>
             <TabsTrigger value="kanban">Kanban Board</TabsTrigger>
             <TabsTrigger value="milestones">{t.milestones}</TabsTrigger>
@@ -450,35 +459,49 @@ export default function ProjectDetailPage() {
 
           {/* Milestones */}
           <TabsContent value="milestones" className="mt-6">
+            <div className="flex justify-end mb-4">
+              <Button size="sm" asChild>
+                <Link to={`/projects/${projectId}/milestones/new`}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  {t.addMilestone}
+                </Link>
+              </Button>
+            </div>
             <div className="space-y-4">
               {milestones.map((milestone) => (
-                <Card key={milestone.id} className="border-foreground/10">
-                  <CardContent className="p-6">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-4">
-                        {milestone.completed ? (
-                          <span className="inline-block h-6 w-6 rounded-full bg-emerald-500" />
-                        ) : (
-                          <Clock className="h-6 w-6" style={{ color: '#6246EA' }} />
-                        )}
-                        <div>
-                          <h4 className="font-semibold">{milestone.title}</h4>
-                          <p className="text-sm text-foreground/60">
-                            Due: {milestone.dueDate || '-'}
-                          </p>
+                <Link
+                  key={milestone.id}
+                  to={`/projects/${projectId}/milestones/${milestone.id}`}
+                  className="block"
+                >
+                  <Card className="border-foreground/10 hover:border-foreground/20 transition-colors cursor-pointer">
+                    <CardContent className="p-6">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-4">
+                          {milestone.completed ? (
+                            <span className="inline-block h-6 w-6 rounded-full bg-emerald-500" />
+                          ) : (
+                            <Clock className="h-6 w-6" style={{ color: '#6246EA' }} />
+                          )}
+                          <div>
+                            <h4 className="font-semibold">{milestone.title}</h4>
+                            <p className="text-sm text-foreground/60">
+                              Due: {milestone.dueDate || '-'}
+                            </p>
+                          </div>
                         </div>
+                        <Badge
+                          style={{
+                            backgroundColor: milestone.completed ? '#2CB67D20' : '#6246EA20',
+                            color: milestone.completed ? '#2CB67D' : '#6246EA',
+                          }}
+                        >
+                          {milestone.completed ? 'Completed' : 'In Progress'}
+                        </Badge>
                       </div>
-                      <Badge
-                        style={{
-                          backgroundColor: milestone.completed ? '#2CB67D20' : '#6246EA20',
-                          color: milestone.completed ? '#2CB67D' : '#6246EA',
-                        }}
-                      >
-                        {milestone.completed ? 'Completed' : 'In Progress'}
-                      </Badge>
-                    </div>
-                  </CardContent>
-                </Card>
+                    </CardContent>
+                  </Card>
+                </Link>
               ))}
               {milestones.length === 0 && (
                 <div className="text-center py-12 text-foreground/50">

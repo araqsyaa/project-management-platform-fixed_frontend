@@ -1,11 +1,14 @@
 package com.projectmanagement.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotBlank;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.List;
 
 @Entity
 @Table(name = "milestones")
@@ -20,6 +23,8 @@ public class Milestone {
     @NotBlank
     private String name;
 
+    private String description;
+
     private LocalDate dueDate;
 
     private boolean completed;
@@ -27,4 +32,8 @@ public class Milestone {
     @ManyToOne
     @JoinColumn(name = "project_id")
     private Project project;
+
+    @OneToMany(mappedBy = "milestone")
+    @JsonIgnore
+    private List<Task> tasks = new ArrayList<>();
 }

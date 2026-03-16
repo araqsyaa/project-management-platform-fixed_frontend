@@ -79,8 +79,31 @@ public class AppService {
 
     // Milestones
     public List<Milestone> getMilestones(Long projectId) { return milestoneRepo.findByProjectId(projectId); }
+    public Optional<Milestone> getMilestone(Long id) { return milestoneRepo.findById(id); }
     public Milestone createMilestone(Long projectId, Milestone m) {
         m.setProject(projectRepo.findById(projectId).orElseThrow());
+        return milestoneRepo.save(m);
+    }
+    public Milestone updateMilestone(Long projectId, Long milestoneId, String name, String description,
+                                     LocalDate dueDate, List<Long> taskIds) {
+        Milestone m = milestoneRepo.findById(milestoneId)
+                .filter(mil -> mil.getProject() != null && mil.getProject().getId().equals(projectId))
+                .orElseThrow(() -> new IllegalArgumentException("Milestone not found"));
+        m.setName(name);
+        m.setDescription(description);
+        m.setDueDate(dueDate);
+        List<Task> projectTasks = taskRepo.findByProjectId(projectId);
+        for (Task t : projectTasks) {
+            if (taskIds != null && taskIds.contains(t.getId())) {
+                t.setMilestone(m);
+                taskRepo.save(t);
+            } else if (m.equals(t.getMilestone())) {
+                t.setMilestone(null);
+                taskRepo.save(t);
+            }
+        }
+        List<Task> assigned = taskRepo.findByMilestoneId(milestoneId);
+        m.setCompleted(assigned.stream().allMatch(t -> t.getStatus() == Task.Status.DONE));
         return milestoneRepo.save(m);
     }
 
@@ -90,7 +113,17 @@ public class AppService {
     public List<Task> getTasksByProject(Long projectId) { return taskRepo.findByProjectId(projectId); }
     public List<Task> getTasksByAssignee(Long userId) { return taskRepo.findByAssigneeId(userId); }
     public Task createTask(Task t) { return taskRepo.save(t); }
-    public Task updateTask(Task t) { return taskRepo.save(t); }
+    public Task updateTask(Task t) {
+        Task saved = taskRepo.save(t);
+        if (saved.getMilestone() != null) {
+            Milestone m = saved.getMilestone();
+            boolean allDone = taskRepo.findByMilestoneId(m.getId()).stream()
+                    .allMatch(task -> task.getStatus() == Task.Status.DONE);
+            m.setCompleted(allDone);
+            milestoneRepo.save(m);
+        }
+        return saved;
+    }
     public void deleteTask(Long id) { taskRepo.deleteById(id); }
     public List<Task> getOverdueTasks() {
         return taskRepo.findByDeadlineBeforeAndStatusNot(LocalDate.now(), Task.Status.DONE);

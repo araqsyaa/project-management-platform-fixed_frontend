@@ -75,6 +75,37 @@ export const api = {
   tasks: () => request<ApiTask[]>('/tasks'),
   projectTasks: (projectId: string) => request<ApiTask[]>(`/projects/${projectId}/tasks`),
   milestones: (projectId: string) => request<ApiMilestone[]>(`/projects/${projectId}/milestones`),
+  milestone: (id: string) => request<ApiMilestone>(`/milestones/${id}`),
+  createMilestone: (projectId: string, payload: {
+    name: string;
+    description?: string;
+    dueDate?: string;
+    taskIds?: string[];
+  }) =>
+    request<ApiMilestone>(`/projects/${projectId}/milestones`, {
+      method: 'POST',
+      body: JSON.stringify({
+        name: payload.name,
+        description: payload.description ?? null,
+        dueDate: payload.dueDate || null,
+        taskIds: (payload.taskIds ?? []).map((id) => Number(id)),
+      }),
+    }),
+  updateMilestone: (projectId: string, milestoneId: string, payload: {
+    name: string;
+    description?: string;
+    dueDate?: string;
+    taskIds?: string[];
+  }) =>
+    request<ApiMilestone>(`/projects/${projectId}/milestones/${milestoneId}`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        name: payload.name,
+        description: payload.description ?? null,
+        dueDate: payload.dueDate || null,
+        taskIds: (payload.taskIds ?? []).map((id) => Number(id)),
+      }),
+    }),
   taskComments: (taskId: string) => request<ApiComment[]>(`/tasks/${taskId}/comments`),
   addComment: (taskId: string, content: string) =>
     request<ApiComment>(`/tasks/${taskId}/comments`, {
@@ -167,6 +198,7 @@ export interface ApiTask {
 export interface ApiMilestone {
   id: number;
   name: string;
+  description?: string;
   dueDate?: string;
   completed: boolean;
 }

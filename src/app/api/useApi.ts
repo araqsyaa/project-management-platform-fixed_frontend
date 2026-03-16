@@ -105,7 +105,14 @@ export function useTasks(projectId?: string) {
 }
 
 export function useMilestones(projectId: string) {
-  const [data, setData] = useState<{ id: string; projectId: string; title: string; dueDate: string; completed: boolean }[]>([]);
+  const [data, setData] = useState<{
+    id: string;
+    projectId: string;
+    title: string;
+    description: string;
+    dueDate: string;
+    completed: boolean;
+  }[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -121,6 +128,7 @@ export function useMilestones(projectId: string) {
             id: String(m.id),
             projectId,
             title: m.name,
+            description: m.description || '',
             dueDate: m.dueDate || '',
             completed: m.completed,
           }))

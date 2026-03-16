@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api")
@@ -82,9 +83,41 @@ public class ApiController {
     @GetMapping("/projects/{projectId}/milestones")
     public List<Milestone> milestones(@PathVariable Long projectId) { return service.getMilestones(projectId); }
 
+    @GetMapping("/milestones/{id}")
+    public ResponseEntity<?> milestone(@PathVariable Long id) {
+        return service.getMilestone(id).map(ResponseEntity::ok).orElse(ResponseEntity.notFound().build());
+    }
+
     @PostMapping("/projects/{projectId}/milestones")
-    public Milestone createMilestone(@PathVariable Long projectId, @RequestBody Milestone milestone) {
-        return service.createMilestone(projectId, milestone);
+    public Milestone createMilestone(@PathVariable Long projectId, @RequestBody Map<String, Object> body) {
+        Milestone m = new Milestone();
+        m.setName((String) body.get("name"));
+        m.setDescription(body.containsKey("description") ? (String) body.get("description") : null);
+        if (body.get("dueDate") != null && !((String) body.get("dueDate")).isEmpty())
+            m.setDueDate(java.time.LocalDate.parse((String) body.get("dueDate")));
+        Milestone created = service.createMilestone(projectId, m);
+        @SuppressWarnings("unchecked")
+        List<Number> taskIds = (List<Number>) body.get("taskIds");
+        if (taskIds != null && !taskIds.isEmpty()) {
+            List<Long> ids = taskIds.stream().map(Number::longValue).collect(Collectors.toList());
+            service.updateMilestone(projectId, created.getId(), created.getName(), created.getDescription(),
+                    created.getDueDate(), ids);
+        }
+        return service.getMilestone(created.getId()).orElse(created);
+    }
+
+    @PutMapping("/projects/{projectId}/milestones/{milestoneId}")
+    public Milestone updateMilestone(@PathVariable Long projectId, @PathVariable Long milestoneId,
+                                     @RequestBody Map<String, Object> body) {
+        String name = (String) body.get("name");
+        String description = body.containsKey("description") ? (String) body.get("description") : null;
+        java.time.LocalDate dueDate = null;
+        if (body.get("dueDate") != null && !((String) body.get("dueDate")).isEmpty())
+            dueDate = java.time.LocalDate.parse((String) body.get("dueDate"));
+        @SuppressWarnings("unchecked")
+        List<Number> taskIds = body.containsKey("taskIds") ? (List<Number>) body.get("taskIds") : null;
+        List<Long> ids = taskIds != null ? taskIds.stream().map(Number::longValue).collect(Collectors.toList()) : null;
+        return service.updateMilestone(projectId, milestoneId, name, description, dueDate, ids);
     }
 
     @GetMapping("/tasks")
