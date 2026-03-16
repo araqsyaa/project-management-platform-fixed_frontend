@@ -91,6 +91,7 @@ public class AppService {
     public List<Task> getTasksByAssignee(Long userId) { return taskRepo.findByAssigneeId(userId); }
     public Task createTask(Task t) { return taskRepo.save(t); }
     public Task updateTask(Task t) { return taskRepo.save(t); }
+    public void deleteTask(Long id) { taskRepo.deleteById(id); }
     public List<Task> getOverdueTasks() {
         return taskRepo.findByDeadlineBeforeAndStatusNot(LocalDate.now(), Task.Status.DONE);
     }

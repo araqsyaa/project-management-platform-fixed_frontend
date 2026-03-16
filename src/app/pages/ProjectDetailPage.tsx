@@ -4,7 +4,7 @@ import { t } from '../i18n/translations';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
-import { Calendar, Clock, User, Plus } from 'lucide-react';
+import { Calendar, Clock, User, Plus, Pencil, Trash2 } from 'lucide-react';
 import { useProjects, useTasks, useMilestones, useUsers } from '../api/useApi';
 import { api, ApiTask } from '../api/client';
 import { DndProvider, useDrag, useDrop } from 'react-dnd';
@@ -55,9 +55,13 @@ function toFrontendTask(t: ApiTask, projectId?: string): FrontendTask {
 function TaskCard({
   task,
   assigneeName,
+  onEdit,
+  onRemove,
 }: {
   task: FrontendTask;
   assigneeName: string;
+  onEdit: (task: FrontendTask) => void;
+  onRemove: (taskId: string) => void;
 }) {
   const [{ isDragging }, drag] = useDrag<DragItem, unknown, { isDragging: boolean }>({
     type: TASK_TYPE,
@@ -76,7 +80,33 @@ function TaskCard({
       <CardContent className="p-4 space-y-2">
         <div className="flex items-start justify-between gap-2">
           <h4 className="font-medium text-sm flex-1">{task.title}</h4>
-          <Badge className="text-xs capitalize">{task.priority}</Badge>
+          <div className="flex items-center gap-1 shrink-0">
+            <Badge className="text-xs capitalize">{task.priority}</Badge>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7"
+              onClick={(e) => {
+                e.stopPropagation();
+                onEdit(task);
+              }}
+              title={t.edit}
+            >
+              <Pencil className="h-3.5 w-3.5" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 text-destructive hover:text-destructive"
+              onClick={(e) => {
+                e.stopPropagation();
+                onRemove(task.id);
+              }}
+              title={t.delete}
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </Button>
+          </div>
         </div>
         <div className="flex items-center gap-2 text-xs text-foreground/60">
           <Calendar className="h-3 w-3" />
@@ -98,6 +128,8 @@ function Column({
   getAssigneeName,
   onDropTask,
   onAddTaskClick,
+  onTaskEdit,
+  onTaskRemove,
 }: {
   title: string;
   status: StatusKey;
@@ -105,6 +137,8 @@ function Column({
   getAssigneeName: (assigneeId: string) => string;
   onDropTask: (taskId: string, newStatus: StatusKey) => void;
   onAddTaskClick: (initialStatus: StatusKey) => void;
+  onTaskEdit: (task: FrontendTask) => void;
+  onTaskRemove: (taskId: string) => void;
 }) {
   const [{ isOver }, drop] = useDrop<DragItem, unknown, { isOver: boolean }>({
     accept: TASK_TYPE,
@@ -134,6 +168,8 @@ function Column({
             key={task.id}
             task={task}
             assigneeName={getAssigneeName(task.assigneeId)}
+            onEdit={onTaskEdit}
+            onRemove={onTaskRemove}
           />
         ))}
         {tasks.length === 0 && (
@@ -159,6 +195,7 @@ export default function ProjectDetailPage() {
 
   const [tasks, setTasks] = useState<FrontendTask[]>([]);
   const [isAddOpen, setIsAddOpen] = useState(false);
+  const [editingTask, setEditingTask] = useState<FrontendTask | null>(null);
   const [newStatus, setNewStatus] = useState<StatusKey>('backlog');
   const [newTitle, setNewTitle] = useState('');
   const [newDescription, setNewDescription] = useState('');
@@ -235,34 +272,102 @@ export default function ProjectDetailPage() {
     }
   };
 
-  const handleCreateTask = async () => {
-    if (!projectId || !newTitle.trim()) {
-      return;
+  const handleOpenAdd = () => {
+    setEditingTask(null);
+    setNewStatus('backlog');
+    setNewTitle('');
+    setNewDescription('');
+    setNewPriority('medium');
+    setNewAssigneeId('');
+    setNewDueDate('');
+    setIsAddOpen(true);
+  };
+
+  const handleEditTask = (task: FrontendTask) => {
+    setEditingTask(task);
+    setNewTitle(task.title);
+    setNewDescription(task.description);
+    setNewStatus(task.status);
+    setNewPriority(task.priority);
+    setNewAssigneeId(task.assigneeId);
+    setNewDueDate(task.dueDate);
+    setIsAddOpen(true);
+  };
+
+  const handleSaveTask = async () => {
+    if (!projectId || !newTitle.trim()) return;
+    if (editingTask) {
+      try {
+        const updated = await api.updateTask(editingTask.id, {
+          projectId,
+          title: newTitle,
+          description: newDescription,
+          status: newStatus.toUpperCase(),
+          priority: newPriority.toUpperCase(),
+          assigneeId: newAssigneeId || undefined,
+          deadline: newDueDate || undefined,
+        });
+        const frontend = toFrontendTask(updated, projectId);
+        setTasks((prev) =>
+          prev.map((t) => (t.id === editingTask.id ? frontend : t)),
+        );
+        setIsAddOpen(false);
+        setEditingTask(null);
+        toast.success('Task updated', {
+          style: { backgroundColor: '#2CB67D', color: '#FFFFFE' },
+        });
+      } catch (e) {
+        console.error(e);
+        toast.error('Failed to update task', {
+          style: { backgroundColor: '#E45858', color: '#FFFFFE' },
+        });
+      }
+    } else {
+      try {
+        const res = await api.createTask({
+          projectId,
+          title: newTitle,
+          description: newDescription,
+          status: newStatus.toUpperCase(),
+          priority: newPriority.toUpperCase(),
+          assigneeId: newAssigneeId || undefined,
+          deadline: newDueDate || undefined,
+        });
+        const created = toFrontendTask(res, projectId);
+        setTasks((prev) => [...prev, created]);
+        setIsAddOpen(false);
+        setNewTitle('');
+        setNewDescription('');
+        setNewPriority('medium');
+        setNewAssigneeId('');
+        setNewDueDate('');
+        toast.success('Task created', {
+          style: { backgroundColor: '#2CB67D', color: '#FFFFFE' },
+        });
+      } catch (e) {
+        console.error(e);
+        toast.error('Failed to create task', {
+          style: { backgroundColor: '#E45858', color: '#FFFFFE' },
+        });
+      }
     }
+  };
+
+  const handleDeleteTask = async (taskId: string) => {
+    if (!window.confirm('Remove this task? This cannot be undone.')) return;
     try {
-      const res = await api.createTask({
-        projectId,
-        title: newTitle,
-        description: newDescription,
-        status: newStatus.toUpperCase(),
-        priority: newPriority.toUpperCase(),
-        assigneeId: newAssigneeId || undefined,
-        deadline: newDueDate || undefined,
-      });
-      const created = toFrontendTask(res, projectId);
-      setTasks((prev) => [...prev, created]);
-      setIsAddOpen(false);
-      setNewTitle('');
-      setNewDescription('');
-      setNewPriority('medium');
-      setNewAssigneeId('');
-      setNewDueDate('');
-      toast.success('Task created', {
+      await api.deleteTask(taskId);
+      setTasks((prev) => prev.filter((t) => t.id !== taskId));
+      if (editingTask?.id === taskId) {
+        setIsAddOpen(false);
+        setEditingTask(null);
+      }
+      toast.success('Task removed', {
         style: { backgroundColor: '#2CB67D', color: '#FFFFFE' },
       });
     } catch (e) {
       console.error(e);
-      toast.error('Failed to create task', {
+      toast.error('Failed to remove task', {
         style: { backgroundColor: '#E45858', color: '#FFFFFE' },
       });
     }
@@ -312,13 +417,7 @@ export default function ProjectDetailPage() {
           {/* Kanban */}
           <TabsContent value="kanban" className="mt-6">
             <div className="flex justify-end mb-4">
-              <Button
-                size="sm"
-                onClick={() => {
-                  setNewStatus('backlog');
-                  setIsAddOpen(true);
-                }}
-              >
+              <Button size="sm" onClick={handleOpenAdd}>
                 <Plus className="h-4 w-4 mr-2" />
                 {t.addTask}
               </Button>
@@ -333,9 +432,17 @@ export default function ProjectDetailPage() {
                   getAssigneeName={getAssigneeName}
                   onDropTask={handleDropTask}
                   onAddTaskClick={(status) => {
+                    setEditingTask(null);
                     setNewStatus(status);
+                    setNewTitle('');
+                    setNewDescription('');
+                    setNewPriority('medium');
+                    setNewAssigneeId('');
+                    setNewDueDate('');
                     setIsAddOpen(true);
                   }}
+                  onTaskEdit={handleEditTask}
+                  onTaskRemove={handleDeleteTask}
                 />
               ))}
             </div>
@@ -382,11 +489,19 @@ export default function ProjectDetailPage() {
           </TabsContent>
         </Tabs>
 
-        {/* Add Task Modal */}
-        <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
+        {/* Add / Edit Task Modal */}
+        <Dialog
+          open={isAddOpen}
+          onOpenChange={(open) => {
+            setIsAddOpen(open);
+            if (!open) setEditingTask(null);
+          }}
+        >
           <DialogContent className="max-w-lg">
             <DialogHeader>
-              <DialogTitle>{t.addTask}</DialogTitle>
+              <DialogTitle>
+                {editingTask ? t.edit : t.addTask}
+              </DialogTitle>
             </DialogHeader>
             <div className="space-y-4">
               <div className="space-y-2">
@@ -471,11 +586,16 @@ export default function ProjectDetailPage() {
               <div className="flex justify-end gap-2 pt-2">
                 <Button
                   variant="outline"
-                  onClick={() => setIsAddOpen(false)}
+                  onClick={() => {
+                    setIsAddOpen(false);
+                    setEditingTask(null);
+                  }}
                 >
                   {t.cancel}
                 </Button>
-                <Button onClick={handleCreateTask}>{t.create}</Button>
+                <Button onClick={handleSaveTask}>
+                  {editingTask ? t.edit : t.create}
+                </Button>
               </div>
             </div>
           </DialogContent>

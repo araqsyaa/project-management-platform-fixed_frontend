@@ -124,6 +124,8 @@ export const api = {
         assignee: payload.assigneeId ? { id: Number(payload.assigneeId) } : null,
       }),
     }),
+  deleteTask: (id: string) =>
+    request<void>(`/tasks/${id}`, { method: 'DELETE' }),
 };
 
 // API response types (backend format)

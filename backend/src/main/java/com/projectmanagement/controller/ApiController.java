@@ -110,6 +110,12 @@ public class ApiController {
         return service.updateTask(task);
     }
 
+    @DeleteMapping("/tasks/{id}")
+    public ResponseEntity<Void> deleteTask(@PathVariable Long id) {
+        service.deleteTask(id);
+        return ResponseEntity.ok().build();
+    }
+
     @GetMapping("/tasks/{taskId}/comments")
     public List<Comment> comments(@PathVariable Long taskId) { return service.getComments(taskId); }
 
