@@ -75,6 +75,12 @@ export const api = {
   tasks: () => request<ApiTask[]>('/tasks'),
   projectTasks: (projectId: string) => request<ApiTask[]>(`/projects/${projectId}/tasks`),
   milestones: (projectId: string) => request<ApiMilestone[]>(`/projects/${projectId}/milestones`),
+  taskComments: (taskId: string) => request<ApiComment[]>(`/tasks/${taskId}/comments`),
+  addComment: (taskId: string, content: string) =>
+    request<ApiComment>(`/tasks/${taskId}/comments`, {
+      method: 'POST',
+      body: JSON.stringify({ content }),
+    }),
   createTask: (payload: {
     projectId: string;
     title: string;
@@ -161,6 +167,13 @@ export interface ApiMilestone {
   name: string;
   dueDate?: string;
   completed: boolean;
+}
+
+export interface ApiComment {
+  id: number;
+  content: string;
+  createdAt: string;
+  user?: { id: number; name: string } | null;
 }
 
 // Map backend role to frontend format

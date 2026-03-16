@@ -395,6 +395,7 @@ export default function ProjectDetailPage() {
                   id="task-title"
                   value={newTitle}
                   onChange={(e) => setNewTitle(e.target.value)}
+                  className="border border-foreground/20"
                 />
               </div>
               <div className="space-y-2">
@@ -404,6 +405,7 @@ export default function ProjectDetailPage() {
                   rows={3}
                   value={newDescription}
                   onChange={(e) => setNewDescription(e.target.value)}
+                  className="border border-foreground/20"
                 />
               </div>
               <div className="grid grid-cols-2 gap-4">
