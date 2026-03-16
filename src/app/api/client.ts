@@ -75,6 +75,49 @@ export const api = {
   tasks: () => request<ApiTask[]>('/tasks'),
   projectTasks: (projectId: string) => request<ApiTask[]>(`/projects/${projectId}/tasks`),
   milestones: (projectId: string) => request<ApiMilestone[]>(`/projects/${projectId}/milestones`),
+  createTask: (payload: {
+    projectId: string;
+    title: string;
+    description?: string;
+    status: string;
+    priority: string;
+    assigneeId?: string;
+    deadline?: string;
+  }) =>
+    request<ApiTask>('/tasks', {
+      method: 'POST',
+      body: JSON.stringify({
+        title: payload.title,
+        description: payload.description ?? '',
+        status: payload.status,
+        priority: payload.priority,
+        deadline: payload.deadline ?? null,
+        project: { id: Number(payload.projectId) },
+        assignee: payload.assigneeId ? { id: Number(payload.assigneeId) } : null,
+      }),
+    }),
+  updateTask: (id: string, payload: {
+    projectId: string;
+    title: string;
+    description?: string;
+    status: string;
+    priority: string;
+    assigneeId?: string;
+    deadline?: string;
+  }) =>
+    request<ApiTask>(`/tasks/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        id: Number(id),
+        title: payload.title,
+        description: payload.description ?? '',
+        status: payload.status,
+        priority: payload.priority,
+        deadline: payload.deadline ?? null,
+        project: { id: Number(payload.projectId) },
+        assignee: payload.assigneeId ? { id: Number(payload.assigneeId) } : null,
+      }),
+    }),
 };
 
 // API response types (backend format)
