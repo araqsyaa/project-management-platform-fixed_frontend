@@ -542,13 +542,13 @@ export default function ProjectDetailPage() {
             if (!open) setEditingTask(null);
           }}
         >
-          <DialogContent className="max-w-lg">
+          <DialogContent className="max-w-lg max-h-[85vh] overflow-hidden">
             <DialogHeader>
               <DialogTitle>
                 {editingTask ? t.edit : t.addTask}
               </DialogTitle>
             </DialogHeader>
-            <div className="space-y-4">
+            <div className="space-y-4 overflow-y-auto pr-2 max-h-[calc(85vh-5rem)]">
               <div className="space-y-2">
                 <Label htmlFor="task-title">Title</Label>
                 <Input
@@ -649,7 +649,7 @@ export default function ProjectDetailPage() {
                     <h3 className="font-semibold">Comments</h3>
                   </div>
 
-                  <div className="space-y-3">
+                  <div className="space-y-3 max-h-64 overflow-y-auto pr-1">
                     {commentsLoading ? (
                       <p className="text-sm text-foreground/60">Loading comments...</p>
                     ) : comments.length === 0 ? (
