@@ -121,6 +121,12 @@ public class ApiController {
         return service.updateMilestone(projectId, milestoneId, name, description, dueDate, ids);
     }
 
+    @DeleteMapping("/projects/{projectId}/milestones/{milestoneId}")
+    public ResponseEntity<Void> deleteMilestone(@PathVariable Long projectId, @PathVariable Long milestoneId) {
+        service.deleteMilestone(projectId, milestoneId);
+        return ResponseEntity.ok().build();
+    }
+
     @GetMapping("/tasks")
     public List<Task> tasks() { return service.getTasks(); }
 

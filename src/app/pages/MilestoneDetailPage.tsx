@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router';
+import { useParams, useNavigate, useLocation } from 'react-router';
 import { t } from '../i18n/translations';
 import { Card, CardContent } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
@@ -9,15 +9,17 @@ import { Label } from '../components/ui/label';
 import { Textarea } from '../components/ui/textarea';
 import { api, ApiTask, ApiMilestone } from '../api/client';
 import { toast } from 'sonner';
-import { ArrowLeft, CheckCircle2, Circle } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, Circle, Trash2 } from 'lucide-react';
 
 export default function MilestoneDetailPage() {
   const { projectId, milestoneId } = useParams();
   const navigate = useNavigate();
-  const isNew = milestoneId === 'new';
+  const location = useLocation();
+  const isNew = !milestoneId || location.pathname.endsWith('/milestones/new');
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [projectTitle, setProjectTitle] = useState('');
   const [milestone, setMilestone] = useState<ApiMilestone | null>(null);
   const [tasks, setTasks] = useState<ApiTask[]>([]);
@@ -78,8 +80,9 @@ export default function MilestoneDetailPage() {
     }
     setSaving(true);
     try {
+      let savedMilestone: ApiMilestone | null = null;
       if (isNew) {
-        await api.createMilestone(projectId, {
+        savedMilestone = await api.createMilestone(projectId, {
           name: name.trim(),
           description: description.trim() || undefined,
           dueDate: dueDate || undefined,
@@ -87,7 +90,7 @@ export default function MilestoneDetailPage() {
         });
         toast.success('Milestone created');
       } else if (milestoneId) {
-        await api.updateMilestone(projectId, milestoneId, {
+        savedMilestone = await api.updateMilestone(projectId, milestoneId, {
           name: name.trim(),
           description: description.trim() || undefined,
           dueDate: dueDate || undefined,
@@ -95,12 +98,46 @@ export default function MilestoneDetailPage() {
         });
         toast.success('Milestone updated');
       }
-      navigate(`/projects/${projectId}?tab=milestones`);
+      navigate(`/projects/${projectId}?tab=milestones`, {
+        state: savedMilestone
+          ? {
+              savedMilestone: {
+                id: String(savedMilestone.id),
+                projectId,
+                title: savedMilestone.name,
+                description: savedMilestone.description || '',
+                dueDate: savedMilestone.dueDate || '',
+                completed: savedMilestone.completed,
+              },
+            }
+          : undefined,
+      });
     } catch (e) {
       console.error(e);
       toast.error('Failed to save milestone');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!projectId || !milestoneId || isNew) return;
+    if (!window.confirm('Delete this milestone? Assigned tasks will be kept and unlinked from the milestone.')) {
+      return;
+    }
+
+    setDeleting(true);
+    try {
+      await api.deleteMilestone(projectId, milestoneId);
+      toast.success('Milestone deleted');
+      navigate(`/projects/${projectId}?tab=milestones`, {
+        state: { deletedMilestoneId: milestoneId },
+      });
+    } catch (e) {
+      console.error(e);
+      toast.error('Failed to delete milestone');
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -230,13 +267,25 @@ export default function MilestoneDetailPage() {
           </div>
 
           <div className="flex justify-end gap-2 pt-2">
+            {!isNew && (
+              <Button
+                variant="outline"
+                onClick={handleDelete}
+                disabled={saving || deleting}
+                className="mr-auto text-destructive hover:text-destructive"
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
+                {deleting ? 'Deleting...' : t.delete}
+              </Button>
+            )}
             <Button
               variant="outline"
               onClick={() => navigate(`/projects/${projectId}?tab=milestones`)}
+              disabled={saving || deleting}
             >
               {t.cancel}
             </Button>
-            <Button onClick={handleSave} disabled={saving}>
+            <Button onClick={handleSave} disabled={saving || deleting}>
               {saving ? 'Saving...' : isNew ? t.create : t.save}
             </Button>
           </div>

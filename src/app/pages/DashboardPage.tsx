@@ -4,18 +4,26 @@ import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import { Button } from '../components/ui/button';
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { FolderKanban, ListTodo, Flag, TrendingUp, ArrowRight } from 'lucide-react';
-import { activityFeed } from '../data/mockData';
 import { useNavigate } from 'react-router';
-import { useProjects, useTasks } from '../api/useApi';
+import { useMilestones, useProjects, useTasks } from '../api/useApi';
 
 export default function DashboardPage() {
   const navigate = useNavigate();
   const { projects, loading } = useProjects();
   const { tasks } = useTasks();
+  const firstProjectId = projects[0]?.id || '';
+  const { milestones } = useMilestones(firstProjectId);
 
   const totalProjects = projects.length;
   const activeTasks = tasks.filter(t => t.status === 'in_progress' || t.status === 'review').length;
-  const upcomingMilestones = 0;
+  const upcomingMilestones = milestones.filter((milestone) => !milestone.completed).length;
+  const activityFeed = tasks.slice(0, 4).map((task, index) => ({
+    id: task.id,
+    user: task.assigneeId ? `User #${task.assigneeId}` : 'Unassigned',
+    action: 'is working on',
+    target: task.title,
+    timestamp: `${index + 1} task${index === 0 ? '' : 's'} ago`,
+  }));
 
   const activityData = [
     { name: 'Mon', tasks: 8 },

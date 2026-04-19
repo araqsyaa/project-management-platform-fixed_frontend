@@ -107,6 +107,17 @@ public class AppService {
         m.setCompleted(assigned.stream().allMatch(t -> t.getStatus() == Task.Status.DONE));
         return milestoneRepo.save(m);
     }
+    public void deleteMilestone(Long projectId, Long milestoneId) {
+        Milestone m = milestoneRepo.findById(milestoneId)
+                .filter(mil -> mil.getProject() != null && mil.getProject().getId().equals(projectId))
+                .orElseThrow(() -> new IllegalArgumentException("Milestone not found"));
+        List<Task> assigned = taskRepo.findByMilestoneId(milestoneId);
+        for (Task task : assigned) {
+            task.setMilestone(null);
+            taskRepo.save(task);
+        }
+        milestoneRepo.delete(m);
+    }
 
     // Tasks
     public List<Task> getTasks() { return taskRepo.findAll(); }

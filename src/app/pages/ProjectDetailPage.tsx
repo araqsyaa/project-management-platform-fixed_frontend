@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useSearchParams, useNavigate, Link } from 'react-router';
+import { useParams, useSearchParams, useNavigate, Link, useLocation } from 'react-router';
 import { t } from '../i18n/translations';
 import { Card, CardContent } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
@@ -35,6 +35,15 @@ interface FrontendComment {
   createdAt: string;
   userId: string;
   userName: string;
+}
+
+interface FrontendMilestone {
+  id: string;
+  projectId: string;
+  title: string;
+  description: string;
+  dueDate: string;
+  completed: boolean;
 }
 
 function toFrontendTask(t: ApiTask, projectId?: string): FrontendTask {
@@ -167,6 +176,7 @@ function Column({
 export default function ProjectDetailPage() {
   const { projectId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams] = useSearchParams();
   const tabFromUrl = searchParams.get('tab') === 'milestones' ? 'milestones' : 'kanban';
   const { projects, loading: projectsLoading } = useProjects();
@@ -176,6 +186,7 @@ export default function ProjectDetailPage() {
   const { user } = useAuth();
 
   const [tasks, setTasks] = useState<FrontendTask[]>([]);
+  const [milestoneItems, setMilestoneItems] = useState<FrontendMilestone[]>([]);
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<FrontendTask | null>(null);
   const [newStatus, setNewStatus] = useState<StatusKey>('backlog');
@@ -195,6 +206,30 @@ export default function ProjectDetailPage() {
     const mapped = apiTasks.map((t) => toFrontendTask(t as ApiTask, projectId));
     setTasks(mapped);
   }, [apiTasks, projectId]);
+
+  useEffect(() => {
+    setMilestoneItems(milestones);
+  }, [milestones]);
+
+  useEffect(() => {
+    const savedMilestone = (location.state as { savedMilestone?: FrontendMilestone } | null)?.savedMilestone;
+    const deletedMilestoneId = (location.state as { deletedMilestoneId?: string } | null)?.deletedMilestoneId;
+
+    if (!savedMilestone && !deletedMilestoneId) return;
+
+    if (savedMilestone) {
+      setMilestoneItems((prev) => {
+        const withoutCurrent = prev.filter((milestone) => milestone.id !== savedMilestone.id);
+        return [savedMilestone, ...withoutCurrent];
+      });
+    }
+
+    if (deletedMilestoneId) {
+      setMilestoneItems((prev) => prev.filter((milestone) => milestone.id !== deletedMilestoneId));
+    }
+
+    navigate(location.pathname + location.search, { replace: true, state: null });
+  }, [location.pathname, location.search, location.state, navigate]);
 
   const handleOpenAdd = () => {
     setEditingTask(null);
@@ -490,7 +525,7 @@ export default function ProjectDetailPage() {
               </Button>
             </div>
             <div className="space-y-4">
-              {milestones.map((milestone) => (
+              {milestoneItems.map((milestone) => (
                 <Link
                   key={milestone.id}
                   to={`/projects/${projectId}/milestones/${milestone.id}`}
@@ -498,15 +533,18 @@ export default function ProjectDetailPage() {
                 >
                   <Card className="border-foreground/10 hover:border-foreground/20 transition-colors cursor-pointer">
                     <CardContent className="p-6">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-4">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex items-start gap-4">
                           {milestone.completed ? (
-                            <span className="inline-block h-6 w-6 rounded-full bg-emerald-500" />
+                            <span className="mt-1 inline-block h-6 w-6 rounded-full bg-emerald-500" />
                           ) : (
-                            <Clock className="h-6 w-6" style={{ color: '#6246EA' }} />
+                            <Clock className="mt-1 h-6 w-6 shrink-0" style={{ color: '#6246EA' }} />
                           )}
-                          <div>
+                          <div className="space-y-1">
                             <h4 className="font-semibold">{milestone.title}</h4>
+                            <p className="text-sm text-foreground/70">
+                              {milestone.description || 'No description provided'}
+                            </p>
                             <p className="text-sm text-foreground/60">
                               Due: {milestone.dueDate || '-'}
                             </p>
@@ -525,7 +563,7 @@ export default function ProjectDetailPage() {
                   </Card>
                 </Link>
               ))}
-              {milestones.length === 0 && (
+              {milestoneItems.length === 0 && (
                 <div className="text-center py-12 text-foreground/50">
                   No milestones to display
                 </div>

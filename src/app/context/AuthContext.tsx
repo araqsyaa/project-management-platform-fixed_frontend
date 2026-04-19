@@ -1,9 +1,9 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { User } from '../data/mockData';
-import { api, setToken, storeUser, getStoredUser, clearToken, toFrontendRole } from '../api/client';
+import { api, getToken, setToken, storeUser, getStoredUser, clearToken, toFrontendRole } from '../api/client';
+import { FrontendUser } from '../types/frontend';
 
 interface AuthContextType {
-  user: User | null;
+  user: FrontendUser | null;
   login: (email: string, password: string) => Promise<boolean>;
   register: (name: string, email: string, password: string) => Promise<boolean>;
   logout: () => void;
@@ -13,35 +13,45 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-function toUser(apiUser: { id: number; name: string; email: string; role: string; avatar?: string }): User {
+function toUser(apiUser: { id: number; name: string; email: string; role: string; avatar?: string }): FrontendUser {
   return {
     id: String(apiUser.id),
     name: apiUser.name,
     email: apiUser.email,
-    role: toFrontendRole(apiUser.role) as User['role'],
+    role: toFrontendRole(apiUser.role) as FrontendUser['role'],
     avatar: apiUser.avatar,
   };
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<FrontendUser | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    if (token) {
-      api.users()
-        .then((users) => {
-          // Use first user as fallback; ideally backend would have /me
-          if (users.length > 0) {
-            setUser(toUser(users[0]));
-          }
-        })
-        .catch(() => clearToken())
-        .finally(() => setLoading(false));
+    const token = getToken();
+    const storedUser = getStoredUser();
+    if (token && storedUser) {
+      setUser({
+        id: String(storedUser.id),
+        name: storedUser.name,
+        email: storedUser.email,
+        role: storedUser.role as FrontendUser['role'],
+      });
     } else {
-      setLoading(false);
+      clearToken();
+      setUser(null);
     }
+    setLoading(false);
+  }, []);
+
+  useEffect(() => {
+    const handleAuthExpired = () => {
+      setUser(null);
+      setLoading(false);
+    };
+
+    window.addEventListener('pm-auth-expired', handleAuthExpired);
+    return () => window.removeEventListener('pm-auth-expired', handleAuthExpired);
   }, []);
 
   const login = async (email: string, password: string): Promise<boolean> => {

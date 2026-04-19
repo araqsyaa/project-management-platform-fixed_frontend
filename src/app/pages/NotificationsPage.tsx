@@ -2,12 +2,11 @@ import React, { useState } from 'react';
 import { t } from '../i18n/translations';
 import { Button } from '../components/ui/button';
 import { Card, CardContent } from '../components/ui/card';
-import { Badge } from '../components/ui/badge';
 import { CheckCheck, Bell, MessageSquare, Flag, CheckCircle2, AlertCircle } from 'lucide-react';
-import { notifications as mockNotifications, Notification } from '../data/mockData';
+import { FrontendNotification } from '../types/frontend';
 
 export default function NotificationsPage() {
-  const [notifications, setNotifications] = useState<Notification[]>(mockNotifications);
+  const [notifications, setNotifications] = useState<FrontendNotification[]>([]);
 
   const markAsRead = (id: string) => {
     setNotifications(prev =>

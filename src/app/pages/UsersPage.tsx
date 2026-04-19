@@ -6,18 +6,18 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import { Badge } from '../components/ui/badge';
 import { Avatar, AvatarFallback } from '../components/ui/avatar';
 import { Plus, Search, Edit, Trash2 } from 'lucide-react';
-import { Role, User } from '../data/mockData';
 import { useUsers } from '../api/useApi';
 import { api } from '../api/client';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/ui/dialog';
 import { Label } from '../components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
+import { FrontendUser, Role } from '../types/frontend';
 
 export default function UsersPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const { users, loading, error } = useUsers();
 
-  const [userList, setUserList] = useState<User[]>(users);
+  const [userList, setUserList] = useState<FrontendUser[]>(users);
   const [isAddUserOpen, setIsAddUserOpen] = useState(false);
   const [newUserName, setNewUserName] = useState('');
   const [newUserEmail, setNewUserEmail] = useState('');
@@ -67,7 +67,7 @@ export default function UsersPage() {
 
       const res = await api.auth.register(newUserName, newUserEmail, 'password1234', backendRole);
 
-      const created: User = {
+      const created: FrontendUser = {
         id: String(res.user.id),
         name: res.user.name,
         email: res.user.email,

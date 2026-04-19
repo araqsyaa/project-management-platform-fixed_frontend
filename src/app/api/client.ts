@@ -25,6 +25,12 @@ export function clearToken() {
   localStorage.removeItem(USER_KEY);
 }
 
+function notifyAuthExpired() {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event('pm-auth-expired'));
+  }
+}
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const token = getToken();
   const headers: HeadersInit = {
@@ -37,6 +43,10 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${API_URL}${path}`, { ...options, headers });
   if (!res.ok) {
     const text = await res.text();
+    if (res.status === 401 || res.status === 403) {
+      clearToken();
+      notifyAuthExpired();
+    }
     throw new Error(text || `Request failed: ${res.status}`);
   }
   return res.json().catch(() => ({}));
@@ -105,6 +115,10 @@ export const api = {
         dueDate: payload.dueDate || null,
         taskIds: (payload.taskIds ?? []).map((id) => Number(id)),
       }),
+    }),
+  deleteMilestone: (projectId: string, milestoneId: string) =>
+    request<void>(`/projects/${projectId}/milestones/${milestoneId}`, {
+      method: 'DELETE',
     }),
   taskComments: (taskId: string) => request<ApiComment[]>(`/tasks/${taskId}/comments`),
   addComment: (taskId: string, content: string) =>
