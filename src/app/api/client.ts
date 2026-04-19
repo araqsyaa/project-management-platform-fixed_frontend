@@ -112,6 +112,10 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ content }),
     }),
+  deleteComment: (taskId: string, commentId: string) =>
+    request<void>(`/tasks/${taskId}/comments/${commentId}`, {
+      method: 'DELETE',
+    }),
   createTask: (payload: {
     projectId: string;
     title: string;
@@ -207,7 +211,7 @@ export interface ApiComment {
   id: number;
   content: string;
   createdAt: string;
-  user?: { id: number; name: string } | null;
+  user?: { id: number; name: string; email?: string; avatar?: string } | null;
 }
 
 // Map backend role to frontend format

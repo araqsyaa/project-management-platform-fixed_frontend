@@ -1,5 +1,6 @@
 package com.projectmanagement.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotBlank;
 import lombok.Data;
@@ -22,6 +23,7 @@ public class Comment {
 
     private LocalDateTime createdAt = LocalDateTime.now();
 
+    @JsonIgnore
     @ManyToOne
     @JoinColumn(name = "task_id")
     private Task task;

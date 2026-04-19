@@ -1,5 +1,6 @@
 package com.projectmanagement.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotBlank;
 import lombok.Data;
@@ -50,6 +51,7 @@ public class Task {
 
     private LocalDateTime createdAt = LocalDateTime.now();
 
+    @JsonIgnore
     @OneToMany(mappedBy = "task", cascade = CascadeType.ALL)
     private List<Comment> comments = new ArrayList<>();
 }

@@ -5,6 +5,7 @@ import com.projectmanagement.service.AppService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
@@ -158,6 +159,15 @@ public class ApiController {
         return service.createComment(taskId, userId, body.get("content"));
     }
 
+    @DeleteMapping("/tasks/{taskId}/comments/{commentId}")
+    public ResponseEntity<Void> deleteComment(@PathVariable Long taskId,
+                                              @PathVariable Long commentId,
+                                              Authentication auth) {
+        Long userId = (Long) auth.getPrincipal();
+        service.deleteComment(taskId, commentId, userId);
+        return ResponseEntity.ok().build();
+    }
+
     @GetMapping("/reports/overdue-tasks")
     public List<Task> overdueTasks() { return service.getOverdueTasks(); }
 
@@ -172,5 +182,10 @@ public class ApiController {
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<String> handleError(IllegalArgumentException e) {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(e.getMessage());
+    }
+
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<String> handleAccessDenied(AccessDeniedException e) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(e.getMessage());
     }
 }

@@ -3,6 +3,7 @@ package com.projectmanagement.service;
 import com.projectmanagement.model.*;
 import com.projectmanagement.repository.*;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
@@ -140,5 +141,15 @@ public class AppService {
         c.setTask(taskRepo.findById(taskId).orElseThrow());
         c.setUser(userRepo.findById(userId).orElseThrow());
         return commentRepo.save(c);
+    }
+
+    public void deleteComment(Long taskId, Long commentId, Long userId) {
+        Comment comment = commentRepo.findById(commentId)
+                .filter(existing -> existing.getTask() != null && existing.getTask().getId().equals(taskId))
+                .orElseThrow(() -> new IllegalArgumentException("Comment not found"));
+        if (comment.getUser() == null || !comment.getUser().getId().equals(userId)) {
+            throw new AccessDeniedException("You can delete only your own comments");
+        }
+        commentRepo.delete(comment);
     }
 }

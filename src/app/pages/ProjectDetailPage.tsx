@@ -4,9 +4,9 @@ import { t } from '../i18n/translations';
 import { Card, CardContent } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
-import { Calendar, Clock, User, Plus, Pencil, Trash2 } from 'lucide-react';
+import { Calendar, Clock, MessageSquare, Send, User, Plus, Pencil, Trash2 } from 'lucide-react';
 import { useProjects, useTasks, useMilestones, useUsers } from '../api/useApi';
-import { api, ApiTask } from '../api/client';
+import { api, ApiComment, ApiTask, getStoredUser } from '../api/client';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/ui/dialog';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
@@ -14,6 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Textarea } from '../components/ui/textarea';
 import { Button } from '../components/ui/button';
 import { toast } from 'sonner';
+import { useAuth } from '../context/AuthContext';
 
 type StatusKey = 'backlog' | 'in_progress' | 'review' | 'done';
 
@@ -26,6 +27,14 @@ interface FrontendTask {
   status: StatusKey;
   priority: 'high' | 'medium' | 'low';
   dueDate: string;
+}
+
+interface FrontendComment {
+  id: string;
+  content: string;
+  createdAt: string;
+  userId: string;
+  userName: string;
 }
 
 function toFrontendTask(t: ApiTask, projectId?: string): FrontendTask {
@@ -164,6 +173,7 @@ export default function ProjectDetailPage() {
   const { tasks: apiTasks, loading: tasksLoading } = useTasks(projectId || '');
   const { milestones, loading: milestonesLoading } = useMilestones(projectId || '');
   const { users } = useUsers();
+  const { user } = useAuth();
 
   const [tasks, setTasks] = useState<FrontendTask[]>([]);
   const [isAddOpen, setIsAddOpen] = useState(false);
@@ -174,12 +184,68 @@ export default function ProjectDetailPage() {
   const [newPriority, setNewPriority] = useState<'high' | 'medium' | 'low'>('medium');
   const [newAssigneeId, setNewAssigneeId] = useState('');
   const [newDueDate, setNewDueDate] = useState('');
+  const [comments, setComments] = useState<FrontendComment[]>([]);
+  const [commentsLoading, setCommentsLoading] = useState(false);
+  const [newComment, setNewComment] = useState('');
+  const storedUser = getStoredUser();
+  const currentUserId = user?.id || (storedUser ? String(storedUser.id) : '');
 
   useEffect(() => {
     if (!projectId) return;
     const mapped = apiTasks.map((t) => toFrontendTask(t as ApiTask, projectId));
     setTasks(mapped);
   }, [apiTasks, projectId]);
+
+  const handleOpenAdd = () => {
+    setEditingTask(null);
+    setNewStatus('backlog');
+    setNewTitle('');
+    setNewDescription('');
+    setNewPriority('medium');
+    setNewAssigneeId('');
+    setNewDueDate('');
+    setIsAddOpen(true);
+  };
+
+  const handleEditTask = (task: FrontendTask) => {
+    setEditingTask(task);
+    setNewTitle(task.title);
+    setNewDescription(task.description);
+    setNewStatus(task.status);
+    setNewPriority(task.priority);
+    setNewAssigneeId(task.assigneeId);
+    setNewDueDate(task.dueDate);
+    setIsAddOpen(true);
+  };
+
+  useEffect(() => {
+    if (!isAddOpen || !editingTask) {
+      setComments([]);
+      setNewComment('');
+      return;
+    }
+
+    setCommentsLoading(true);
+    api.taskComments(editingTask.id)
+      .then((items) =>
+        setComments(
+          items.map((comment: ApiComment) => ({
+            id: String(comment.id),
+            content: comment.content,
+            createdAt: comment.createdAt,
+            userId: comment.user ? String(comment.user.id) : '',
+            userName: comment.user?.name || 'Unknown user',
+          })),
+        ),
+      )
+      .catch((e) => {
+        console.error(e);
+        toast.error('Failed to load comments', {
+          style: { backgroundColor: '#E45858', color: '#FFFFFE' },
+        });
+      })
+      .finally(() => setCommentsLoading(false));
+  }, [editingTask, isAddOpen]);
 
   if (!projectId || projectsLoading || tasksLoading || milestonesLoading) {
     return <div className="p-8">Loading...</div>;
@@ -209,28 +275,6 @@ export default function ProjectDetailPage() {
   tasks.forEach((task) => {
     tasksByStatus[task.status].push(task);
   });
-
-  const handleOpenAdd = () => {
-    setEditingTask(null);
-    setNewStatus('backlog');
-    setNewTitle('');
-    setNewDescription('');
-    setNewPriority('medium');
-    setNewAssigneeId('');
-    setNewDueDate('');
-    setIsAddOpen(true);
-  };
-
-  const handleEditTask = (task: FrontendTask) => {
-    setEditingTask(task);
-    setNewTitle(task.title);
-    setNewDescription(task.description);
-    setNewStatus(task.status);
-    setNewPriority(task.priority);
-    setNewAssigneeId(task.assigneeId);
-    setNewDueDate(task.dueDate);
-    setIsAddOpen(true);
-  };
 
   const handleSaveTask = async () => {
     if (!projectId || !newTitle.trim()) return;
@@ -306,6 +350,50 @@ export default function ProjectDetailPage() {
     } catch (e) {
       console.error(e);
       toast.error('Failed to remove task', {
+        style: { backgroundColor: '#E45858', color: '#FFFFFE' },
+      });
+    }
+  };
+
+  const handleAddComment = async () => {
+    if (!editingTask || !newComment.trim()) return;
+
+    try {
+      const created = await api.addComment(editingTask.id, newComment.trim());
+      setComments((prev) => [
+        ...prev,
+        {
+          id: String(created.id),
+          content: created.content,
+          createdAt: created.createdAt,
+          userId: created.user ? String(created.user.id) : currentUserId,
+          userName: created.user?.name || user?.name || storedUser?.name || 'You',
+        },
+      ]);
+      setNewComment('');
+      toast.success('Comment added', {
+        style: { backgroundColor: '#2CB67D', color: '#FFFFFE' },
+      });
+    } catch (e) {
+      console.error(e);
+      toast.error('Failed to add comment', {
+        style: { backgroundColor: '#E45858', color: '#FFFFFE' },
+      });
+    }
+  };
+
+  const handleDeleteComment = async (commentId: string) => {
+    if (!editingTask) return;
+
+    try {
+      await api.deleteComment(editingTask.id, commentId);
+      setComments((prev) => prev.filter((comment) => comment.id !== commentId));
+      toast.success('Comment deleted', {
+        style: { backgroundColor: '#2CB67D', color: '#FFFFFE' },
+      });
+    } catch (e) {
+      console.error(e);
+      toast.error('Failed to delete comment', {
         style: { backgroundColor: '#E45858', color: '#FFFFFE' },
       });
     }
@@ -554,6 +642,64 @@ export default function ProjectDetailPage() {
                   {editingTask ? t.edit : t.create}
                 </Button>
               </div>
+              {editingTask && (
+                <div className="border-t border-foreground/10 pt-6 space-y-4">
+                  <div className="flex items-center gap-2">
+                    <MessageSquare className="h-4 w-4" />
+                    <h3 className="font-semibold">Comments</h3>
+                  </div>
+
+                  <div className="space-y-3">
+                    {commentsLoading ? (
+                      <p className="text-sm text-foreground/60">Loading comments...</p>
+                    ) : comments.length === 0 ? (
+                      <p className="text-sm text-foreground/60">No comments yet. Start the discussion below.</p>
+                    ) : (
+                      comments.map((comment) => (
+                        <div key={comment.id} className="rounded-lg border border-foreground/10 p-3 space-y-2">
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <p className="text-sm font-medium">{comment.userName}</p>
+                              <p className="text-xs text-foreground/50">
+                                {new Date(comment.createdAt).toLocaleString()}
+                              </p>
+                            </div>
+                            {comment.userId === currentUserId && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="text-destructive hover:text-destructive"
+                                onClick={() => handleDeleteComment(comment.id)}
+                              >
+                                Delete
+                              </Button>
+                            )}
+                          </div>
+                          <p className="text-sm whitespace-pre-wrap">{comment.content}</p>
+                        </div>
+                      ))
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="task-comment">Add comment</Label>
+                    <Textarea
+                      id="task-comment"
+                      rows={3}
+                      value={newComment}
+                      onChange={(e) => setNewComment(e.target.value)}
+                      placeholder="Write a comment for the team"
+                      className="border border-foreground/20"
+                    />
+                  </div>
+                  <div className="flex justify-end">
+                    <Button onClick={handleAddComment} disabled={!newComment.trim()}>
+                      <Send className="h-4 w-4 mr-2" />
+                      Post comment
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
           </DialogContent>
         </Dialog>
