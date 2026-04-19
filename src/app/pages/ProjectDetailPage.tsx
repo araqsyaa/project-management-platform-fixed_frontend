@@ -1,14 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useSearchParams, useNavigate, Link } from 'react-router';
 import { t } from '../i18n/translations';
-import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
+import { Card, CardContent } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { Calendar, Clock, User, Plus, Pencil, Trash2 } from 'lucide-react';
 import { useProjects, useTasks, useMilestones, useUsers } from '../api/useApi';
 import { api, ApiTask } from '../api/client';
-import { DndProvider, useDrag, useDrop } from 'react-dnd';
-import { HTML5Backend } from 'react-dnd-html5-backend';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/ui/dialog';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
@@ -18,13 +16,6 @@ import { Button } from '../components/ui/button';
 import { toast } from 'sonner';
 
 type StatusKey = 'backlog' | 'in_progress' | 'review' | 'done';
-
-const TASK_TYPE = 'KANBAN_TASK';
-
-interface DragItem {
-  id: string;
-  status: StatusKey;
-}
 
 interface FrontendTask {
   id: string;
@@ -55,27 +46,20 @@ function toFrontendTask(t: ApiTask, projectId?: string): FrontendTask {
 function TaskCard({
   task,
   assigneeName,
+  onOpen,
   onEdit,
   onRemove,
 }: {
   task: FrontendTask;
   assigneeName: string;
+  onOpen: (task: FrontendTask) => void;
   onEdit: (task: FrontendTask) => void;
   onRemove: (taskId: string) => void;
 }) {
-  const [{ isDragging }, drag] = useDrag<DragItem, unknown, { isDragging: boolean }>({
-    type: TASK_TYPE,
-    item: { id: task.id, status: task.status },
-    collect: (monitor) => ({
-      isDragging: monitor.isDragging(),
-    }),
-  });
-
   return (
     <Card
-      ref={drag}
-      className="border-foreground/10 cursor-move"
-      style={{ opacity: isDragging ? 0.5 : 1 }}
+      className="border-foreground/10 cursor-pointer transition-colors hover:border-foreground/20"
+      onClick={() => onOpen(task)}
     >
       <CardContent className="p-4 space-y-2">
         <div className="flex items-start justify-between gap-2">
@@ -126,8 +110,8 @@ function Column({
   status,
   tasks,
   getAssigneeName,
-  onDropTask,
   onAddTaskClick,
+  onTaskOpen,
   onTaskEdit,
   onTaskRemove,
 }: {
@@ -135,29 +119,13 @@ function Column({
   status: StatusKey;
   tasks: FrontendTask[];
   getAssigneeName: (assigneeId: string) => string;
-  onDropTask: (taskId: string, newStatus: StatusKey) => void;
   onAddTaskClick: (initialStatus: StatusKey) => void;
+  onTaskOpen: (task: FrontendTask) => void;
   onTaskEdit: (task: FrontendTask) => void;
   onTaskRemove: (taskId: string) => void;
 }) {
-  const [{ isOver }, drop] = useDrop<DragItem, unknown, { isOver: boolean }>({
-    accept: TASK_TYPE,
-    drop: (item) => {
-      if (item.status !== status) {
-        onDropTask(item.id, status);
-      }
-    },
-    collect: (monitor) => ({
-      isOver: monitor.isOver(),
-    }),
-  });
-
   return (
-    <div
-      ref={drop}
-      className="flex-1 min-w-[260px] rounded-lg p-2"
-      style={{ backgroundColor: isOver ? '#D1D1E9' : 'transparent' }}
-    >
+    <div className="flex-1 min-w-[260px] rounded-lg p-2">
       <div className="mb-3 flex items-center justify-between">
         <h3 className="font-semibold">{title}</h3>
         <Badge variant="secondary">{tasks.length}</Badge>
@@ -168,6 +136,7 @@ function Column({
             key={task.id}
             task={task}
             assigneeName={getAssigneeName(task.assigneeId)}
+            onOpen={onTaskOpen}
             onEdit={onTaskEdit}
             onRemove={onTaskRemove}
           />
@@ -240,40 +209,6 @@ export default function ProjectDetailPage() {
   tasks.forEach((task) => {
     tasksByStatus[task.status].push(task);
   });
-
-  const handleDropTask = async (taskId: string, newStatus: StatusKey) => {
-    if (!projectId) return;
-    const existing = tasks.find((t) => t.id === taskId);
-    if (!existing) return;
-
-    const oldStatus = existing.status;
-    setTasks((prev) =>
-      prev.map((t) => (t.id === taskId ? { ...t, status: newStatus } : t)),
-    );
-
-    try {
-      await api.updateTask(taskId, {
-        projectId,
-        title: existing.title,
-        description: existing.description,
-        status: newStatus.toUpperCase(),
-        priority: existing.priority.toUpperCase(),
-        assigneeId: existing.assigneeId || undefined,
-        deadline: existing.dueDate || undefined,
-      });
-      toast.success('Task status updated', {
-        style: { backgroundColor: '#2CB67D', color: '#FFFFFE' },
-      });
-    } catch (e) {
-      console.error(e);
-      setTasks((prev) =>
-        prev.map((t) => (t.id === taskId ? { ...t, status: oldStatus } : t)),
-      );
-      toast.error('Failed to update task', {
-        style: { backgroundColor: '#E45858', color: '#FFFFFE' },
-      });
-    }
-  };
 
   const handleOpenAdd = () => {
     setEditingTask(null);
@@ -377,7 +312,6 @@ export default function ProjectDetailPage() {
   };
 
   return (
-    <DndProvider backend={HTML5Backend}>
       <div className="space-y-6">
         {/* Project header */}
         <div className="flex items-start justify-between">
@@ -439,7 +373,6 @@ export default function ProjectDetailPage() {
                   status={column.status}
                   tasks={tasksByStatus[column.status]}
                   getAssigneeName={getAssigneeName}
-                  onDropTask={handleDropTask}
                   onAddTaskClick={(status) => {
                     setEditingTask(null);
                     setNewStatus(status);
@@ -450,6 +383,7 @@ export default function ProjectDetailPage() {
                     setNewDueDate('');
                     setIsAddOpen(true);
                   }}
+                  onTaskOpen={handleEditTask}
                   onTaskEdit={handleEditTask}
                   onTaskRemove={handleDeleteTask}
                 />
@@ -624,6 +558,5 @@ export default function ProjectDetailPage() {
           </DialogContent>
         </Dialog>
       </div>
-    </DndProvider>
   );
 }
