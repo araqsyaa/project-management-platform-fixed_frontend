@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useSearchParams, useNavigate, Link, useLocation } from 'react-router';
+import { DndProvider, useDrag, useDrop } from 'react-dnd';
+import { HTML5Backend } from 'react-dnd-html5-backend';
 import { t } from '../i18n/translations';
 import { Card, CardContent } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
@@ -17,6 +19,7 @@ import { toast } from 'sonner';
 import { useAuth } from '../context/AuthContext';
 
 type StatusKey = 'backlog' | 'in_progress' | 'review' | 'done';
+const TASK_CARD_TYPE = 'task-card';
 
 interface FrontendTask {
   id: string;
@@ -46,6 +49,12 @@ interface FrontendMilestone {
   completed: boolean;
 }
 
+interface DraggedTaskItem {
+  id: string;
+  status: StatusKey;
+  type: typeof TASK_CARD_TYPE;
+}
+
 function toFrontendTask(t: ApiTask, projectId?: string): FrontendTask {
   const status = (t.status?.toLowerCase() as StatusKey) || 'backlog';
   const priority = (t.priority?.toLowerCase() as 'high' | 'medium' | 'low') || 'medium';
@@ -67,59 +76,75 @@ function TaskCard({
   onOpen,
   onEdit,
   onRemove,
+  isUpdating,
 }: {
   task: FrontendTask;
   assigneeName: string;
   onOpen: (task: FrontendTask) => void;
   onEdit: (task: FrontendTask) => void;
   onRemove: (taskId: string) => void;
+  isUpdating: boolean;
 }) {
+  const [{ isDragging }, dragRef] = useDrag(() => ({
+    type: TASK_CARD_TYPE,
+    item: { id: task.id, status: task.status },
+    collect: (monitor) => ({
+      isDragging: monitor.isDragging(),
+    }),
+  }), [task.id, task.status]);
+
   return (
-    <Card
-      className="border-foreground/10 cursor-pointer transition-colors hover:border-foreground/20"
-      onClick={() => onOpen(task)}
+    <div
+      ref={dragRef}
     >
-      <CardContent className="p-4 space-y-2">
-        <div className="flex items-start justify-between gap-2">
-          <h4 className="font-medium text-sm flex-1">{task.title}</h4>
-          <div className="flex items-center gap-1 shrink-0">
-            <Badge className="text-xs capitalize">{task.priority}</Badge>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7"
-              onClick={(e) => {
-                e.stopPropagation();
-                onEdit(task);
-              }}
-              title={t.edit}
-            >
-              <Pencil className="h-3.5 w-3.5" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7 text-destructive hover:text-destructive"
-              onClick={(e) => {
-                e.stopPropagation();
-                onRemove(task.id);
-              }}
-              title={t.delete}
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-            </Button>
+      <Card
+        className={`border-foreground/10 cursor-pointer transition-all hover:border-foreground/20 ${
+          isDragging ? 'opacity-40 scale-[0.98]' : ''
+        } ${isUpdating ? 'pointer-events-none opacity-60' : ''}`}
+        onClick={() => onOpen(task)}
+      >
+        <CardContent className="p-4 space-y-2">
+          <div className="flex items-start justify-between gap-2">
+            <h4 className="font-medium text-sm flex-1">{task.title}</h4>
+            <div className="flex items-center gap-1 shrink-0">
+              <Badge className="text-xs capitalize">{task.priority}</Badge>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onEdit(task);
+                }}
+                title={t.edit}
+              >
+                <Pencil className="h-3.5 w-3.5" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 text-destructive hover:text-destructive"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onRemove(task.id);
+                }}
+                title={t.delete}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </Button>
+            </div>
           </div>
-        </div>
-        <div className="flex items-center gap-2 text-xs text-foreground/60">
-          <Calendar className="h-3 w-3" />
-          <span>{task.dueDate || '-'}</span>
-        </div>
-        <div className="flex items-center gap-2 text-xs text-foreground/60">
-          <User className="h-3 w-3" />
-          <span>{assigneeName}</span>
-        </div>
-      </CardContent>
-    </Card>
+          <div className="flex items-center gap-2 text-xs text-foreground/60">
+            <Calendar className="h-3 w-3" />
+            <span>{task.dueDate || '-'}</span>
+          </div>
+          <div className="flex items-center gap-2 text-xs text-foreground/60">
+            <User className="h-3 w-3" />
+            <span>{assigneeName}</span>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
   );
 }
 
@@ -132,6 +157,8 @@ function Column({
   onTaskOpen,
   onTaskEdit,
   onTaskRemove,
+  onTaskDrop,
+  updatingTaskId,
 }: {
   title: string;
   status: StatusKey;
@@ -141,9 +168,30 @@ function Column({
   onTaskOpen: (task: FrontendTask) => void;
   onTaskEdit: (task: FrontendTask) => void;
   onTaskRemove: (taskId: string) => void;
+  onTaskDrop: (taskId: string, nextStatus: StatusKey) => void;
+  updatingTaskId: string | null;
 }) {
+  const [{ isOver, canDrop }, dropRef] = useDrop(() => ({
+    accept: TASK_CARD_TYPE,
+    drop: (item: DraggedTaskItem) => {
+      if (item.status !== status) {
+        onTaskDrop(item.id, status);
+      }
+    },
+    canDrop: (item: DraggedTaskItem) => item.status !== status,
+    collect: (monitor) => ({
+      isOver: monitor.isOver({ shallow: true }),
+      canDrop: monitor.canDrop(),
+    }),
+  }), [onTaskDrop, status]);
+
   return (
-    <div className="flex-1 min-w-[260px] rounded-lg p-2">
+    <div
+      ref={dropRef}
+      className={`flex-1 min-w-[260px] rounded-lg p-2 transition-colors ${
+        isOver && canDrop ? 'bg-[#6246EA]/10 ring-1 ring-[#6246EA]/30' : ''
+      }`}
+    >
       <div className="mb-3 flex items-center justify-between">
         <h3 className="font-semibold">{title}</h3>
         <Badge variant="secondary">{tasks.length}</Badge>
@@ -157,6 +205,7 @@ function Column({
             onOpen={onTaskOpen}
             onEdit={onTaskEdit}
             onRemove={onTaskRemove}
+            isUpdating={updatingTaskId === task.id}
           />
         ))}
         {tasks.length === 0 && (
@@ -186,6 +235,7 @@ export default function ProjectDetailPage() {
   const { user } = useAuth();
 
   const [tasks, setTasks] = useState<FrontendTask[]>([]);
+  const [updatingTaskId, setUpdatingTaskId] = useState<string | null>(null);
   const [milestoneItems, setMilestoneItems] = useState<FrontendMilestone[]>([]);
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<FrontendTask | null>(null);
@@ -370,6 +420,51 @@ export default function ProjectDetailPage() {
     }
   };
 
+  const handleMoveTask = async (taskId: string, nextStatus: StatusKey) => {
+    if (!projectId) return;
+
+    const taskToMove = tasks.find((task) => task.id === taskId);
+    if (!taskToMove || taskToMove.status === nextStatus) {
+      return;
+    }
+
+    const previousTasks = tasks;
+    const optimisticTask = { ...taskToMove, status: nextStatus };
+
+    setUpdatingTaskId(taskId);
+    setTasks((prev) =>
+      prev.map((task) => (task.id === taskId ? optimisticTask : task)),
+    );
+
+    try {
+      const updated = await api.updateTask(taskId, {
+        projectId,
+        title: taskToMove.title,
+        description: taskToMove.description,
+        status: nextStatus.toUpperCase(),
+        priority: taskToMove.priority.toUpperCase(),
+        assigneeId: taskToMove.assigneeId || undefined,
+        deadline: taskToMove.dueDate || undefined,
+      });
+
+      const frontendTask = toFrontendTask(updated, projectId);
+      setTasks((prev) =>
+        prev.map((task) => (task.id === taskId ? frontendTask : task)),
+      );
+      toast.success(`Task moved to ${nextStatus.replace('_', ' ')}`, {
+        style: { backgroundColor: '#2CB67D', color: '#FFFFFE' },
+      });
+    } catch (e) {
+      console.error(e);
+      setTasks(previousTasks);
+      toast.error('Failed to move task', {
+        style: { backgroundColor: '#E45858', color: '#FFFFFE' },
+      });
+    } finally {
+      setUpdatingTaskId(null);
+    }
+  };
+
   const handleDeleteTask = async (taskId: string) => {
     if (!window.confirm('Remove this task? This cannot be undone.')) return;
     try {
@@ -488,30 +583,34 @@ export default function ProjectDetailPage() {
                 {t.addTask}
               </Button>
             </div>
-            <div className="flex gap-6 overflow-x-auto pb-4">
-              {columns.map((column) => (
-                <Column
-                  key={column.status}
-                  title={column.title}
-                  status={column.status}
-                  tasks={tasksByStatus[column.status]}
-                  getAssigneeName={getAssigneeName}
-                  onAddTaskClick={(status) => {
-                    setEditingTask(null);
-                    setNewStatus(status);
-                    setNewTitle('');
-                    setNewDescription('');
-                    setNewPriority('medium');
-                    setNewAssigneeId('');
-                    setNewDueDate('');
-                    setIsAddOpen(true);
-                  }}
-                  onTaskOpen={handleEditTask}
-                  onTaskEdit={handleEditTask}
-                  onTaskRemove={handleDeleteTask}
-                />
-              ))}
-            </div>
+            <DndProvider backend={HTML5Backend}>
+              <div className="flex gap-6 overflow-x-auto pb-4">
+                {columns.map((column) => (
+                  <Column
+                    key={column.status}
+                    title={column.title}
+                    status={column.status}
+                    tasks={tasksByStatus[column.status]}
+                    getAssigneeName={getAssigneeName}
+                    onAddTaskClick={(status) => {
+                      setEditingTask(null);
+                      setNewStatus(status);
+                      setNewTitle('');
+                      setNewDescription('');
+                      setNewPriority('medium');
+                      setNewAssigneeId('');
+                      setNewDueDate('');
+                      setIsAddOpen(true);
+                    }}
+                    onTaskOpen={handleEditTask}
+                    onTaskEdit={handleEditTask}
+                    onTaskRemove={handleDeleteTask}
+                    onTaskDrop={handleMoveTask}
+                    updatingTaskId={updatingTaskId}
+                  />
+                ))}
+              </div>
+            </DndProvider>
           </TabsContent>
 
           {/* Milestones */}
