@@ -94,9 +94,15 @@ export function useTasks(projectId?: string) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const fetch = projectId ? () => api.projectTasks(projectId) : () => api.tasks();
-    fetch()
-      .then((list) => setData(list.map((t) => mapTask(t, projectId))))
+    api.tasks()
+      .then((list) => {
+        const mapped = list.map((t) => mapTask(t));
+        setData(
+          projectId
+            ? mapped.filter((task) => task.projectId === projectId)
+            : mapped,
+        );
+      })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
   }, [projectId]);

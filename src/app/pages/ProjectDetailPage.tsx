@@ -360,6 +360,11 @@ export default function ProjectDetailPage() {
   tasks.forEach((task) => {
     tasksByStatus[task.status].push(task);
   });
+  const totalTaskCount = tasks.length;
+  const completedTaskCount = tasksByStatus.done.length;
+  const projectProgress = totalTaskCount > 0
+    ? Math.round((completedTaskCount / totalTaskCount) * 100)
+    : 0;
 
   const handleSaveTask = async () => {
     if (!projectId || !newTitle.trim()) return;
@@ -542,7 +547,7 @@ export default function ProjectDetailPage() {
           <div className="flex gap-4">
             <div className="text-right">
               <p className="text-sm text-foreground/60">{t.progress}</p>
-              <p className="text-2xl font-semibold">{project.progress ?? 0}%</p>
+              <p className="text-2xl font-semibold">{projectProgress}%</p>
             </div>
             <div className="text-right">
               <p className="text-sm text-foreground/60">{t.deadline}</p>
@@ -556,7 +561,7 @@ export default function ProjectDetailPage() {
           <div
             className="h-full rounded-full transition-all"
             style={{
-              width: `${project.progress ?? 0}%`,
+              width: `${projectProgress}%`,
               backgroundColor: '#6246EA',
             }}
           />
