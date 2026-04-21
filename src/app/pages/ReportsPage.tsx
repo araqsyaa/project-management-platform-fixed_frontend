@@ -5,7 +5,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { FileSpreadsheet, FileText, Download } from 'lucide-react';
-import { useProjects, useTasks, useTeams } from '../api/useApi';
+import { api, ApiMilestone } from '../api/client';
+import { useProjects, useTasks, useTeams, useUsers } from '../api/useApi';
 
 type TaskStatus = 'backlog' | 'in_progress' | 'review' | 'done';
 
@@ -30,12 +31,66 @@ function isOverdue(dateString: string, status: TaskStatus) {
   return dueDate < today;
 }
 
+function isUpcoming(dateString: string, daysAhead = 14) {
+  if (!dateString) return false;
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const targetDate = new Date(dateString);
+  targetDate.setHours(0, 0, 0, 0);
+
+  const diffDays = Math.ceil((targetDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+  return diffDays >= 0 && diffDays <= daysAhead;
+}
+
+function buildIntegerTicks(maxValue: number) {
+  const upperBound = Math.max(1, maxValue);
+  return Array.from({ length: upperBound }, (_, index) => index + 1);
+}
+
 export default function ReportsPage() {
   const { projects, loading: projectsLoading, error: projectsError } = useProjects();
   const { tasks, loading: tasksLoading, error: tasksError } = useTasks();
   const { teams, loading: teamsLoading, error: teamsError } = useTeams();
+  const { users, loading: usersLoading, error: usersError } = useUsers();
   const [selectedProject, setSelectedProject] = useState<string>('all');
   const [selectedTeam, setSelectedTeam] = useState<string>('all');
+  const [milestones, setMilestones] = useState<(ApiMilestone & { projectId: string })[]>([]);
+  const [milestonesLoading, setMilestonesLoading] = useState(true);
+  const [milestonesError, setMilestonesError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (projectsLoading) return;
+    if (projectsError) {
+      setMilestonesLoading(false);
+      setMilestonesError(projectsError);
+      return;
+    }
+
+    if (projects.length === 0) {
+      setMilestones([]);
+      setMilestonesLoading(false);
+      return;
+    }
+
+    setMilestonesLoading(true);
+    setMilestonesError(null);
+
+    Promise.all(
+      projects.map((project) =>
+        api.milestones(project.id).then((items) =>
+          items.map((milestone) => ({
+            ...milestone,
+            projectId: project.id,
+          })),
+        ),
+      ),
+    )
+      .then((allMilestones) => setMilestones(allMilestones.flat()))
+      .catch((error) => setMilestonesError(error.message))
+      .finally(() => setMilestonesLoading(false));
+  }, [projects, projectsError, projectsLoading]);
 
   const availableProjects = projects.filter(
     (project) => selectedTeam === 'all' || project.teamId === selectedTeam,
@@ -55,6 +110,7 @@ export default function ReportsPage() {
   );
   const filteredProjectIds = new Set(filteredProjects.map((project) => project.id));
   const filteredTasks = tasks.filter((task) => filteredProjectIds.has(task.projectId));
+  const filteredMilestones = milestones.filter((milestone) => filteredProjectIds.has(milestone.projectId));
   const completedTasksCount = filteredTasks.filter((task) => task.status === 'done').length;
   const activeTasksCount = filteredTasks.filter(
     (task) => task.status === 'in_progress' || task.status === 'review',
@@ -62,9 +118,16 @@ export default function ReportsPage() {
   const overdueTasksCount = filteredTasks.filter((task) =>
     isOverdue(task.dueDate, task.status as TaskStatus),
   ).length;
-  const efficiency = filteredTasks.length
+  const taskCompletionRate = filteredTasks.length
     ? Math.round((completedTasksCount / filteredTasks.length) * 100)
     : 0;
+  const completedMilestonesCount = filteredMilestones.filter((milestone) => milestone.completed).length;
+  const milestoneCompletionRate = filteredMilestones.length
+    ? Math.round((completedMilestonesCount / filteredMilestones.length) * 100)
+    : 0;
+  const upcomingMilestonesCount = filteredMilestones.filter(
+    (milestone) => !milestone.completed && isUpcoming(milestone.dueDate),
+  ).length;
 
   const tasksByStatus = [
     { name: t.backlog, value: filteredTasks.filter((task) => task.status === 'backlog').length, color: '#2B2C34' },
@@ -78,6 +141,28 @@ export default function ReportsPage() {
     { name: t.medium, value: filteredTasks.filter((task) => task.priority === 'medium').length },
     { name: t.low, value: filteredTasks.filter((task) => task.priority === 'low').length },
   ];
+  const priorityMax = tasksByPriority.reduce(
+    (maxValue, item) => Math.max(maxValue, item.value),
+    0,
+  );
+  const priorityTicks = buildIntegerTicks(priorityMax);
+  const workloadData = [
+    ...users.map((user) => {
+      const assignedTasks = filteredTasks.filter((task) => task.assigneeId === user.id);
+      const completedAssignedTasks = assignedTasks.filter((task) => task.status === 'done').length;
+
+      return {
+        name: user.name,
+        assigned: assignedTasks.length,
+        completed: completedAssignedTasks,
+      };
+    }).filter((item) => item.assigned > 0),
+    {
+      name: 'Unassigned',
+      assigned: filteredTasks.filter((task) => !task.assigneeId).length,
+      completed: filteredTasks.filter((task) => !task.assigneeId && task.status === 'done').length,
+    },
+  ].filter((item) => item.assigned > 0);
 
   const projectProgress = filteredProjects.map((project) => {
     const projectTasks = filteredTasks.filter((task) => task.projectId === project.id);
@@ -88,26 +173,34 @@ export default function ReportsPage() {
 
     return {
       name: project.title.length > 20 ? `${project.title.substring(0, 20)}...` : project.title,
-      progress: computedProgress,
+      completedProgress: computedProgress,
+      remainingProgress: Math.max(0, 100 - computedProgress),
+      totalTasks: projectTasks.length,
+      completedTasks: completedProjectTasks,
     };
   });
 
   const completionTrendMap = filteredTasks
     .filter((task) => task.dueDate)
-    .reduce<Record<string, { deadline: string; completed: number; total: number; sortKey: string }>>((acc, task) => {
+    .reduce<Record<string, {
+      deadline: string;
+      tasksCompleted: number;
+      tasksDue: number;
+      sortKey: string;
+    }>>((acc, task) => {
       const key = toBucketKey(task.dueDate);
       if (!acc[key]) {
         acc[key] = {
           deadline: formatBucketLabel(task.dueDate),
-          completed: 0,
-          total: 0,
+          tasksCompleted: 0,
+          tasksDue: 0,
           sortKey: key,
         };
       }
 
-      acc[key].total += 1;
+      acc[key].tasksDue += 1;
       if (task.status === 'done') {
-        acc[key].completed += 1;
+        acc[key].tasksCompleted += 1;
       }
 
       return acc;
@@ -115,11 +208,15 @@ export default function ReportsPage() {
 
   const completionTrend = Object.values(completionTrendMap).sort(
     (a, b) => a.sortKey.localeCompare(b.sortKey),
-  );
+  ).map((bucket) => ({
+    deadline: bucket.deadline,
+    tasksCompleted: bucket.tasksCompleted,
+    tasksDue: bucket.tasksDue,
+  }));
 
-  if (projectsLoading || tasksLoading || teamsLoading) return <div className="p-8">Loading...</div>;
-  if (projectsError || tasksError || teamsError) {
-    return <div className="p-8 text-red-500">Error: {projectsError || tasksError || teamsError}</div>;
+  if (projectsLoading || tasksLoading || teamsLoading || usersLoading || milestonesLoading) return <div className="p-8">Loading...</div>;
+  if (projectsError || tasksError || teamsError || usersError || milestonesError) {
+    return <div className="p-8 text-red-500">Error: {projectsError || tasksError || teamsError || usersError || milestonesError}</div>;
   }
 
   return (
@@ -181,43 +278,51 @@ export default function ReportsPage() {
         </Select>
       </div>
 
-      {/* Summary Cards */}
-      <div className="grid grid-cols-4 gap-6">
-        <Card className="border-foreground/10">
-          <CardContent className="p-6">
-            <div className="text-sm text-foreground/60 mb-2">{t.totalProjects}</div>
-            <div className="text-3xl font-semibold">{filteredProjects.length}</div>
-          </CardContent>
-        </Card>
-        <Card className="border-foreground/10">
-          <CardContent className="p-6">
-            <div className="text-sm text-foreground/60 mb-2">{t.completedTasks}</div>
-            <div className="text-3xl font-semibold" style={{ color: '#2CB67D' }}>
-              {completedTasksCount}
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="border-foreground/10">
-          <CardContent className="p-6">
-            <div className="text-sm text-foreground/60 mb-2">{t.activeTasks}</div>
-            <div className="text-3xl font-semibold" style={{ color: '#6246EA' }}>
-              {activeTasksCount}
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="border-foreground/10">
-          <CardContent className="p-6">
-            <div className="text-sm text-foreground/60 mb-2">{t.efficiency}</div>
-            <div className="text-3xl font-semibold" style={{ color: '#2CB67D' }}>{efficiency}%</div>
-            <div className="text-xs text-foreground/50 mt-2">
-              {overdueTasksCount} overdue task{overdueTasksCount === 1 ? '' : 's'} in current scope
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+      <section className="space-y-4">
+        <div className="space-y-1">
+          <h2 className="text-xl font-semibold">Project Summary</h2>
+        </div>
 
-      {/* Charts */}
-      <div className="grid grid-cols-2 gap-6">
+        <div className="grid grid-cols-4 gap-6">
+          <Card className="border-foreground/10">
+            <CardContent className="p-6">
+              <div className="text-sm text-foreground/60 mb-2">{t.totalProjects}</div>
+              <div className="text-3xl font-semibold">{filteredProjects.length}</div>
+            </CardContent>
+          </Card>
+          <Card className="border-foreground/10">
+            <CardContent className="p-6">
+              <div className="text-sm text-foreground/60 mb-2">{t.completedTasks}</div>
+              <div className="text-3xl font-semibold" style={{ color: '#2CB67D' }}>
+                {completedTasksCount}
+              </div>
+              <div className="text-xs text-foreground/50 mt-2">
+                {taskCompletionRate}% task completion rate
+              </div>
+            </CardContent>
+          </Card>
+          <Card className="border-foreground/10">
+            <CardContent className="p-6">
+              <div className="text-sm text-foreground/60 mb-2">{t.activeTasks}</div>
+              <div className="text-3xl font-semibold" style={{ color: '#6246EA' }}>
+                {activeTasksCount}
+              </div>
+              <div className="text-xs text-foreground/50 mt-2">
+                {overdueTasksCount} overdue task{overdueTasksCount === 1 ? '' : 's'}
+              </div>
+            </CardContent>
+          </Card>
+          <Card className="border-foreground/10">
+            <CardContent className="p-6">
+              <div className="text-sm text-foreground/60 mb-2">Milestone Completion</div>
+              <div className="text-3xl font-semibold" style={{ color: '#6246EA' }}>{milestoneCompletionRate}%</div>
+              <div className="text-xs text-foreground/50 mt-2">
+                {upcomingMilestonesCount} upcoming milestone{upcomingMilestonesCount === 1 ? '' : 's'} in next 14 days
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
         <Card className="border-foreground/10">
           <CardHeader>
             <CardTitle>Tasks by Status</CardTitle>
@@ -260,7 +365,17 @@ export default function ReportsPage() {
             </div>
           </CardContent>
         </Card>
+      </section>
 
+      <section className="space-y-4">
+        <div className="space-y-1">
+          <h2 className="text-xl font-semibold">Task Distribution</h2>
+          <p className="text-sm text-foreground/60">
+            Compare how work is spread across priorities and how each selected project is progressing.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-2 gap-6">
         <Card className="border-foreground/10">
           <CardHeader>
             <CardTitle>Tasks by Priority</CardTitle>
@@ -270,7 +385,12 @@ export default function ReportsPage() {
               <BarChart data={tasksByPriority}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#2B2C34" opacity={0.1} />
                 <XAxis dataKey="name" stroke="#2B2C34" />
-                <YAxis stroke="#2B2C34" />
+                <YAxis
+                  stroke="#2B2C34"
+                  allowDecimals={false}
+                  domain={[0, Math.max(1, priorityMax)]}
+                  ticks={priorityTicks}
+                />
                 <Tooltip />
                 <Bar dataKey="value" fill="#6246EA" radius={[8, 8, 0, 0]} />
               </BarChart>
@@ -289,7 +409,49 @@ export default function ReportsPage() {
                 <XAxis type="number" domain={[0, 100]} stroke="#2B2C34" />
                 <YAxis dataKey="name" type="category" stroke="#2B2C34" width={150} />
                 <Tooltip />
-                <Bar dataKey="progress" fill="#2CB67D" radius={[0, 8, 8, 0]} />
+                <Bar
+                  dataKey="completedProgress"
+                  stackId="progress"
+                  fill="#2CB67D"
+                  radius={[0, 0, 0, 0]}
+                  name="Completed %"
+                />
+                <Bar
+                  dataKey="remainingProgress"
+                  stackId="progress"
+                  fill="#D1D5DB"
+                  radius={[0, 8, 8, 0]}
+                  name="Remaining %"
+                />
+              </BarChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+        </div>
+      </section>
+
+      <section className="space-y-4">
+        <div className="space-y-1">
+          <h2 className="text-xl font-semibold">Team Workload</h2>
+          <p className="text-sm text-foreground/60">
+            Track who carries the current workload and how delivery volume changes across deadlines.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-2 gap-6">
+        <Card className="border-foreground/10">
+          <CardHeader>
+            <CardTitle>Tasks by Assignee</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart data={workloadData} layout="vertical">
+                <CartesianGrid strokeDasharray="3 3" stroke="#2B2C34" opacity={0.1} />
+                <XAxis type="number" stroke="#2B2C34" allowDecimals={false} />
+                <YAxis dataKey="name" type="category" stroke="#2B2C34" width={120} />
+                <Tooltip />
+                <Bar dataKey="assigned" fill="#6246EA" radius={[0, 8, 8, 0]} name="Assigned tasks" />
+                <Bar dataKey="completed" fill="#2CB67D" radius={[0, 8, 8, 0]} name="Completed tasks" />
               </BarChart>
             </ResponsiveContainer>
           </CardContent>
@@ -297,35 +459,36 @@ export default function ReportsPage() {
 
         <Card className="border-foreground/10">
           <CardHeader>
-            <CardTitle>{t.burndownChart}</CardTitle>
+            <CardTitle>Delivery Trend</CardTitle>
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
               <LineChart data={completionTrend}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#2B2C34" opacity={0.1} />
                 <XAxis dataKey="deadline" stroke="#2B2C34" />
-                <YAxis stroke="#2B2C34" />
+                <YAxis stroke="#2B2C34" allowDecimals={false} />
                 <Tooltip />
                 <Line 
                   type="monotone" 
-                  dataKey="completed" 
+                  dataKey="tasksCompleted" 
                   stroke="#2CB67D" 
                   strokeWidth={2}
-                  name="Completed"
+                  name="Tasks completed"
                 />
                 <Line 
                   type="monotone" 
-                  dataKey="total" 
+                  dataKey="tasksDue" 
                   stroke="#6246EA" 
                   strokeWidth={2}
                   strokeDasharray="5 5"
-                  name="Tasks with deadline"
+                  name="Tasks due"
                 />
               </LineChart>
             </ResponsiveContainer>
           </CardContent>
         </Card>
-      </div>
+        </div>
+      </section>
     </div>
   );
 }
