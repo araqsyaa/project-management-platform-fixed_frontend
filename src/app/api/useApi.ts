@@ -81,6 +81,85 @@ export function buildProjectProgressMap(tasks: Pick<FrontendTask, 'projectId' | 
   }, {});
 }
 
+export function buildProjectProgressChartData(
+  projects: Pick<FrontendProject, 'id' | 'title'>[],
+  tasks: Pick<FrontendTask, 'projectId' | 'status'>[],
+  maxProjects = 6,
+) {
+  const progressMap = buildProjectProgressMap(tasks);
+
+  return projects
+    .map((project) => ({
+      name: project.title.length > 18 ? `${project.title.slice(0, 18)}...` : project.title,
+      progress: progressMap[project.id] ?? 0,
+    }))
+    .sort((a, b) => b.progress - a.progress || a.name.localeCompare(b.name))
+    .slice(0, maxProjects);
+}
+
+export function buildProjectProgressSummaryData(
+  projects: Pick<FrontendProject, 'id' | 'title' | 'deadline'>[],
+  tasks: Pick<FrontendTask, 'projectId' | 'status'>[],
+  maxProjects = 6,
+) {
+  return projects
+    .map((project) => {
+      const projectTasks = tasks.filter((task) => task.projectId === project.id);
+      const doneTasks = projectTasks.filter((task) => task.status === 'done').length;
+      const totalTasks = projectTasks.length;
+      const progress = totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : 0;
+
+      return {
+        id: project.id,
+        title: project.title,
+        deadline: project.deadline,
+        doneTasks,
+        totalTasks,
+        progress,
+      };
+    })
+    .sort((a, b) => b.progress - a.progress || b.totalTasks - a.totalTasks || a.title.localeCompare(b.title))
+    .slice(0, maxProjects);
+}
+
+export function buildRecentActivityChartData(
+  activities: Pick<FrontendActivity, 'createdAt'>[],
+  days = 7,
+) {
+  const formatter = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' });
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const buckets = Array.from({ length: days }, (_, index) => {
+    const date = new Date(today);
+    date.setDate(today.getDate() - (days - index - 1));
+    return {
+      key: date.toISOString().slice(0, 10),
+      name: formatter.format(date),
+      actions: 0,
+    };
+  });
+
+  const bucketMap = buckets.reduce<Record<string, { name: string; actions: number }>>((acc, bucket) => {
+    acc[bucket.key] = { name: bucket.name, actions: bucket.actions };
+    return acc;
+  }, {});
+
+  activities.forEach((activity) => {
+    const activityDate = new Date(activity.createdAt);
+    if (Number.isNaN(activityDate.getTime())) return;
+    const key = activityDate.toISOString().slice(0, 10);
+    if (bucketMap[key]) {
+      bucketMap[key].actions += 1;
+    }
+  });
+
+  return buckets.map((bucket) => ({
+    name: bucketMap[bucket.key].name,
+    actions: bucketMap[bucket.key].actions,
+  }));
+}
+
 export function getProjectProgress(
   tasks: Pick<FrontendTask, 'projectId' | 'status'>[],
   projectId?: string,
