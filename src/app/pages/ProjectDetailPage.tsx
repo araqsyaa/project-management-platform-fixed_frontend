@@ -229,8 +229,8 @@ export default function ProjectDetailPage() {
   const [searchParams] = useSearchParams();
   const tabFromUrl = searchParams.get('tab') === 'milestones' ? 'milestones' : 'kanban';
   const { projects, loading: projectsLoading } = useProjects();
-  const { tasks: apiTasks, loading: tasksLoading } = useTasks(projectId || '');
-  const { milestones, loading: milestonesLoading } = useMilestones(projectId || '');
+  const { tasks: apiTasks, loading: tasksLoading, refresh: refreshTasks } = useTasks(projectId || '');
+  const { milestones, loading: milestonesLoading, refresh: refreshMilestones } = useMilestones(projectId || '');
   const { users } = useUsers();
   const { user } = useAuth();
 
@@ -253,8 +253,7 @@ export default function ProjectDetailPage() {
 
   useEffect(() => {
     if (!projectId) return;
-    const mapped = apiTasks.map((t) => toFrontendTask(t as ApiTask, projectId));
-    setTasks(mapped);
+    setTasks(apiTasks as FrontendTask[]);
   }, [apiTasks, projectId]);
 
   useEffect(() => {
@@ -383,6 +382,8 @@ export default function ProjectDetailPage() {
         setTasks((prev) =>
           prev.map((t) => (t.id === editingTask.id ? frontend : t)),
         );
+        await refreshTasks();
+        await refreshMilestones();
         setIsAddOpen(false);
         setEditingTask(null);
         toast.success('Task updated', {
@@ -407,6 +408,8 @@ export default function ProjectDetailPage() {
         });
         const created = toFrontendTask(res, projectId);
         setTasks((prev) => [...prev, created]);
+        await refreshTasks();
+        await refreshMilestones();
         setIsAddOpen(false);
         setNewTitle('');
         setNewDescription('');
@@ -456,6 +459,8 @@ export default function ProjectDetailPage() {
       setTasks((prev) =>
         prev.map((task) => (task.id === taskId ? frontendTask : task)),
       );
+      await refreshTasks();
+      await refreshMilestones();
       toast.success(`Task moved to ${nextStatus.replace('_', ' ')}`, {
         style: { backgroundColor: '#2CB67D', color: '#FFFFFE' },
       });
@@ -475,6 +480,8 @@ export default function ProjectDetailPage() {
     try {
       await api.deleteTask(taskId);
       setTasks((prev) => prev.filter((t) => t.id !== taskId));
+      await refreshTasks();
+      await refreshMilestones();
       if (editingTask?.id === taskId) {
         setIsAddOpen(false);
         setEditingTask(null);

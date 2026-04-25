@@ -33,6 +33,7 @@ function notifyAuthExpired() {
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const token = getToken();
+  const method = options?.method ?? 'GET';
   const headers: HeadersInit = {
     'Content-Type': 'application/json',
     ...(options?.headers || {}),
@@ -40,7 +41,11 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   if (token) {
     (headers as Record<string, string>)['Authorization'] = `Bearer ${token}`;
   }
-  const res = await fetch(`${API_URL}${path}`, { ...options, headers });
+  const res = await fetch(`${API_URL}${path}`, {
+    ...options,
+    headers,
+    cache: options?.cache ?? (method === 'GET' ? 'no-store' : undefined),
+  });
   if (!res.ok) {
     const text = await res.text();
     if (res.status === 401 || res.status === 403) {

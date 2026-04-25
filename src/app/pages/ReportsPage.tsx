@@ -50,10 +50,10 @@ function buildIntegerTicks(maxValue: number) {
 }
 
 export default function ReportsPage() {
-  const { projects, loading: projectsLoading, error: projectsError } = useProjects();
-  const { tasks, loading: tasksLoading, error: tasksError } = useTasks();
-  const { teams, loading: teamsLoading, error: teamsError } = useTeams();
-  const { users, loading: usersLoading, error: usersError } = useUsers();
+  const { projects, loading: projectsLoading, error: projectsError, refresh: refreshProjects } = useProjects();
+  const { tasks, loading: tasksLoading, error: tasksError, refresh: refreshTasks } = useTasks();
+  const { teams, loading: teamsLoading, error: teamsError, refresh: refreshTeams } = useTeams();
+  const { users, loading: usersLoading, error: usersError, refresh: refreshUsers } = useUsers();
   const [selectedProject, setSelectedProject] = useState<string>('all');
   const [selectedTeam, setSelectedTeam] = useState<string>('all');
   const [milestones, setMilestones] = useState<(ApiMilestone & { projectId: string })[]>([]);
@@ -91,6 +91,28 @@ export default function ReportsPage() {
       .catch((error) => setMilestonesError(error.message))
       .finally(() => setMilestonesLoading(false));
   }, [projects, projectsError, projectsLoading]);
+
+  useEffect(() => {
+    const reloadReportsData = () => {
+      void refreshProjects();
+      void refreshTasks();
+      void refreshTeams();
+      void refreshUsers();
+    };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        reloadReportsData();
+      }
+    };
+
+    window.addEventListener('focus', reloadReportsData);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener('focus', reloadReportsData);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [refreshProjects, refreshTasks, refreshTeams, refreshUsers]);
 
   const availableProjects = projects.filter(
     (project) => selectedTeam === 'all' || project.teamId === selectedTeam,

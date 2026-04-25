@@ -48,14 +48,20 @@ export function useProjects() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    api.projects()
+  const loadProjects = () => {
+    setLoading(true);
+    setError(null);
+    return api.projects()
       .then((list) => setData(list.map(mapProject)))
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    void loadProjects();
   }, []);
 
-  return { projects: data, loading, error };
+  return { projects: data, loading, error, refresh: loadProjects };
 }
 
 export function useUsers() {
@@ -63,14 +69,20 @@ export function useUsers() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    api.users()
+  const loadUsers = () => {
+    setLoading(true);
+    setError(null);
+    return api.users()
       .then((list) => setData(list.map(mapUser)))
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    void loadUsers();
   }, []);
 
-  return { users: data, loading, error };
+  return { users: data, loading, error, refresh: loadUsers };
 }
 
 export function useTeams() {
@@ -78,14 +90,20 @@ export function useTeams() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    api.teams()
+  const loadTeams = () => {
+    setLoading(true);
+    setError(null);
+    return api.teams()
       .then(setData)
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    void loadTeams();
   }, []);
 
-  return { teams: data, loading, error };
+  return { teams: data, loading, error, refresh: loadTeams };
 }
 
 export function useTasks(projectId?: string) {
@@ -93,21 +111,24 @@ export function useTasks(projectId?: string) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    api.tasks()
+  const loadTasks = () => {
+    setLoading(true);
+    setError(null);
+    const request = projectId ? api.projectTasks(projectId) : api.tasks();
+
+    return request
       .then((list) => {
-        const mapped = list.map((t) => mapTask(t));
-        setData(
-          projectId
-            ? mapped.filter((task) => task.projectId === projectId)
-            : mapped,
-        );
+        setData(list.map((t) => mapTask(t, projectId)));
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    void loadTasks();
   }, [projectId]);
 
-  return { tasks: data, loading, error };
+  return { tasks: data, loading, error, refresh: loadTasks };
 }
 
 export function useMilestones(projectId: string) {
@@ -122,12 +143,14 @@ export function useMilestones(projectId: string) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const loadMilestones = () => {
     if (!projectId) {
       setLoading(false);
-      return;
+      return Promise.resolve();
     }
-    api.milestones(projectId)
+    setLoading(true);
+    setError(null);
+    return api.milestones(projectId)
       .then((list) =>
         setData(
           list.map((m) => ({
@@ -142,7 +165,11 @@ export function useMilestones(projectId: string) {
       )
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    void loadMilestones();
   }, [projectId]);
 
-  return { milestones: data, loading, error };
+  return { milestones: data, loading, error, refresh: loadMilestones };
 }
