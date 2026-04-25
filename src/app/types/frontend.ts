@@ -17,3 +17,13 @@ export interface FrontendNotification {
   read: boolean;
   createdAt: string;
 }
+
+export interface FrontendActivity {
+  id: string;
+  type: 'task' | 'comment' | 'milestone' | 'success' | 'error';
+  title: string;
+  message: string;
+  createdAt: string;
+  actorName: string;
+  targetPath: string;
+}

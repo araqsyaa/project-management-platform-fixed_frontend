@@ -76,6 +76,7 @@ export const api = {
   teams: () => request<ApiTeam[]>('/teams'),
   projects: () => request<ApiProject[]>('/projects'),
   project: (id: string) => request<ApiProject>(`/projects/${id}`),
+  activities: (limit?: number) => request<ApiActivity[]>(`/activities${limit ? `?limit=${limit}` : ''}`),
   createProject: (payload: { name: string; description?: string; teamId?: string; startDate?: string; endDate?: string }) =>
     request<ApiProject>('/projects', {
       method: 'POST',
@@ -230,6 +231,16 @@ export interface ApiComment {
   id: number;
   content: string;
   createdAt: string;
+  user?: { id: number; name: string; email?: string; avatar?: string } | null;
+}
+
+export interface ApiActivity {
+  id: number;
+  type: string;
+  title: string;
+  message: string;
+  createdAt: string;
+  targetPath?: string;
   user?: { id: number; name: string; email?: string; avatar?: string } | null;
 }
 

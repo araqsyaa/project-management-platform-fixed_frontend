@@ -22,6 +22,8 @@ public class Notification {
 
     private String message;
 
+    private String targetPath;
+
     private boolean read;
 
     private LocalDateTime createdAt = LocalDateTime.now();

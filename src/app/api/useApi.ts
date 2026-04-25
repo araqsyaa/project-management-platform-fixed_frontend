@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { api, ApiProject, ApiTask, ApiUser, ApiTeam } from './client';
+import { api, ApiActivity, ApiProject, ApiTask, ApiUser, ApiTeam } from './client';
+import { FrontendActivity } from '../types/frontend';
 
 export type FrontendProject = ReturnType<typeof mapProject>;
 export type FrontendTask = ReturnType<typeof mapTask>;
@@ -43,6 +44,18 @@ function mapTask(t: ApiTask, projectId?: string) {
     status: (t.status?.toLowerCase().replace('_', '_') || 'backlog') as 'backlog' | 'in_progress' | 'review' | 'done',
     priority: (t.priority?.toLowerCase() || 'medium') as 'high' | 'medium' | 'low',
     dueDate: t.deadline || '',
+  };
+}
+
+function mapActivity(activity: ApiActivity): FrontendActivity {
+  return {
+    id: String(activity.id),
+    type: (activity.type || 'task') as FrontendActivity['type'],
+    title: activity.title,
+    message: activity.message,
+    createdAt: activity.createdAt,
+    actorName: activity.user?.name || 'System',
+    targetPath: activity.targetPath || '/projects',
   };
 }
 
@@ -205,4 +218,25 @@ export function useMilestones(projectId: string) {
   }, [projectId]);
 
   return { milestones: data, loading, error, refresh: loadMilestones };
+}
+
+export function useActivities(limit?: number) {
+  const [data, setData] = useState<FrontendActivity[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const loadActivities = () => {
+    setLoading(true);
+    setError(null);
+    return api.activities(limit)
+      .then((list) => setData(list.map(mapActivity)))
+      .catch((e) => setError(e.message))
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    void loadActivities();
+  }, [limit]);
+
+  return { activities: data, loading, error, refresh: loadActivities };
 }

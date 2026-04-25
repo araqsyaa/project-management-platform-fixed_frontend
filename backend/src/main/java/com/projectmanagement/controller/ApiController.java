@@ -90,26 +90,30 @@ public class ApiController {
     }
 
     @PostMapping("/projects/{projectId}/milestones")
-    public Milestone createMilestone(@PathVariable Long projectId, @RequestBody Map<String, Object> body) {
+    public Milestone createMilestone(@PathVariable Long projectId,
+                                     @RequestBody Map<String, Object> body,
+                                     Authentication auth) {
         Milestone m = new Milestone();
         m.setName((String) body.get("name"));
         m.setDescription(body.containsKey("description") ? (String) body.get("description") : null);
         if (body.get("dueDate") != null && !((String) body.get("dueDate")).isEmpty())
             m.setDueDate(java.time.LocalDate.parse((String) body.get("dueDate")));
-        Milestone created = service.createMilestone(projectId, m);
+        Long userId = auth != null ? (Long) auth.getPrincipal() : null;
+        Milestone created = service.createMilestone(projectId, m, userId);
         @SuppressWarnings("unchecked")
         List<Number> taskIds = (List<Number>) body.get("taskIds");
         if (taskIds != null && !taskIds.isEmpty()) {
             List<Long> ids = taskIds.stream().map(Number::longValue).collect(Collectors.toList());
             service.updateMilestone(projectId, created.getId(), created.getName(), created.getDescription(),
-                    created.getDueDate(), ids);
+                    created.getDueDate(), ids, userId);
         }
         return service.getMilestone(created.getId()).orElse(created);
     }
 
     @PutMapping("/projects/{projectId}/milestones/{milestoneId}")
     public Milestone updateMilestone(@PathVariable Long projectId, @PathVariable Long milestoneId,
-                                     @RequestBody Map<String, Object> body) {
+                                     @RequestBody Map<String, Object> body,
+                                     Authentication auth) {
         String name = (String) body.get("name");
         String description = body.containsKey("description") ? (String) body.get("description") : null;
         java.time.LocalDate dueDate = null;
@@ -118,12 +122,16 @@ public class ApiController {
         @SuppressWarnings("unchecked")
         List<Number> taskIds = body.containsKey("taskIds") ? (List<Number>) body.get("taskIds") : null;
         List<Long> ids = taskIds != null ? taskIds.stream().map(Number::longValue).collect(Collectors.toList()) : null;
-        return service.updateMilestone(projectId, milestoneId, name, description, dueDate, ids);
+        Long userId = auth != null ? (Long) auth.getPrincipal() : null;
+        return service.updateMilestone(projectId, milestoneId, name, description, dueDate, ids, userId);
     }
 
     @DeleteMapping("/projects/{projectId}/milestones/{milestoneId}")
-    public ResponseEntity<Void> deleteMilestone(@PathVariable Long projectId, @PathVariable Long milestoneId) {
-        service.deleteMilestone(projectId, milestoneId);
+    public ResponseEntity<Void> deleteMilestone(@PathVariable Long projectId,
+                                                @PathVariable Long milestoneId,
+                                                Authentication auth) {
+        Long userId = auth != null ? (Long) auth.getPrincipal() : null;
+        service.deleteMilestone(projectId, milestoneId, userId);
         return ResponseEntity.ok().build();
     }
 
@@ -142,12 +150,16 @@ public class ApiController {
     public List<Task> tasksByUser(@PathVariable Long userId) { return service.getTasksByAssignee(userId); }
 
     @PostMapping("/tasks")
-    public Task createTask(@RequestBody Task task) { return service.createTask(task); }
+    public Task createTask(@RequestBody Task task, Authentication auth) {
+        Long userId = auth != null ? (Long) auth.getPrincipal() : null;
+        return service.createTask(task, userId);
+    }
 
     @PutMapping("/tasks/{id}")
-    public Task updateTask(@PathVariable Long id, @RequestBody Task task) {
+    public Task updateTask(@PathVariable Long id, @RequestBody Task task, Authentication auth) {
         task.setId(id);
-        return service.updateTask(task);
+        Long userId = auth != null ? (Long) auth.getPrincipal() : null;
+        return service.updateTask(task, userId);
     }
 
     @DeleteMapping("/tasks/{id}")
@@ -158,6 +170,11 @@ public class ApiController {
 
     @GetMapping("/tasks/{taskId}/comments")
     public List<Comment> comments(@PathVariable Long taskId) { return service.getComments(taskId); }
+
+    @GetMapping("/activities")
+    public List<Notification> activities(@RequestParam(required = false) Integer limit) {
+        return service.getActivities(limit);
+    }
 
     @PostMapping("/tasks/{taskId}/comments")
     public Comment addComment(@PathVariable Long taskId, @RequestBody Map<String, String> body, Authentication auth) {

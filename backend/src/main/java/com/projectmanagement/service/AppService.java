@@ -8,8 +8,10 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -23,6 +25,7 @@ public class AppService {
     private final MilestoneRepository milestoneRepo;
     private final TaskRepository taskRepo;
     private final CommentRepository commentRepo;
+    private final NotificationRepository notificationRepo;
     private final PasswordEncoder passwordEncoder;
     private final Map<String, Long> tokenStore;
 
@@ -81,15 +84,25 @@ public class AppService {
     // Milestones
     public List<Milestone> getMilestones(Long projectId) { return milestoneRepo.findByProjectId(projectId); }
     public Optional<Milestone> getMilestone(Long id) { return milestoneRepo.findById(id); }
-    public Milestone createMilestone(Long projectId, Milestone m) {
+    public Milestone createMilestone(Long projectId, Milestone m, Long actorId) {
         m.setProject(projectRepo.findById(projectId).orElseThrow());
-        return milestoneRepo.save(m);
+        Milestone created = milestoneRepo.save(m);
+        createActivity(
+                actorId,
+                "milestone",
+                "Milestone created",
+                actorName(actorId) + " created milestone \"" + created.getName() + "\" in " + projectName(created.getProject()),
+                projectPath(created.getProject())
+        );
+        return created;
     }
     public Milestone updateMilestone(Long projectId, Long milestoneId, String name, String description,
-                                     LocalDate dueDate, List<Long> taskIds) {
+                                     LocalDate dueDate, List<Long> taskIds, Long actorId) {
         Milestone m = milestoneRepo.findById(milestoneId)
                 .filter(mil -> mil.getProject() != null && mil.getProject().getId().equals(projectId))
                 .orElseThrow(() -> new IllegalArgumentException("Milestone not found"));
+        String previousName = m.getName();
+        LocalDate previousDueDate = m.getDueDate();
         m.setName(name);
         m.setDescription(description);
         m.setDueDate(dueDate);
@@ -105,18 +118,40 @@ public class AppService {
         }
         List<Task> assigned = taskRepo.findByMilestoneId(milestoneId);
         m.setCompleted(assigned.stream().allMatch(t -> t.getStatus() == Task.Status.DONE));
-        return milestoneRepo.save(m);
+        Milestone saved = milestoneRepo.save(m);
+        String changeSummary = !Objects.equals(previousName, saved.getName())
+                ? "renamed milestone to \"" + saved.getName() + "\""
+                : !Objects.equals(previousDueDate, saved.getDueDate())
+                    ? "updated milestone deadline for \"" + saved.getName() + "\""
+                    : "updated milestone \"" + saved.getName() + "\"";
+        createActivity(
+                actorId,
+                "milestone",
+                "Milestone updated",
+                actorName(actorId) + " " + changeSummary + " in " + projectName(saved.getProject()),
+                projectPath(saved.getProject())
+        );
+        return saved;
     }
-    public void deleteMilestone(Long projectId, Long milestoneId) {
+    public void deleteMilestone(Long projectId, Long milestoneId, Long actorId) {
         Milestone m = milestoneRepo.findById(milestoneId)
                 .filter(mil -> mil.getProject() != null && mil.getProject().getId().equals(projectId))
                 .orElseThrow(() -> new IllegalArgumentException("Milestone not found"));
+        String milestoneName = m.getName();
+        Project project = m.getProject();
         List<Task> assigned = taskRepo.findByMilestoneId(milestoneId);
         for (Task task : assigned) {
             task.setMilestone(null);
             taskRepo.save(task);
         }
         milestoneRepo.delete(m);
+        createActivity(
+                actorId,
+                "milestone",
+                "Milestone deleted",
+                actorName(actorId) + " deleted milestone \"" + milestoneName + "\" from " + projectName(project),
+                projectPath(project)
+        );
     }
 
     // Tasks
@@ -124,21 +159,40 @@ public class AppService {
     public Optional<Task> getTask(Long id) { return taskRepo.findById(id); }
     public List<Task> getTasksByProject(Long projectId) { return taskRepo.findByProjectId(projectId); }
     public List<Task> getTasksByAssignee(Long userId) { return taskRepo.findByAssigneeId(userId); }
-    public Task createTask(Task t) {
+    public Task createTask(Task t, Long actorId) {
         Task task = new Task();
         applyTaskChanges(task, t);
         Task saved = taskRepo.save(task);
         updateMilestoneCompletion(saved.getMilestone());
+        createActivity(
+                actorId,
+                "task",
+                "Task created",
+                actorName(actorId) + " created task \"" + saved.getTitle() + "\" in " + projectName(saved.getProject()),
+                taskPath(saved)
+        );
         return saved;
     }
-    public Task updateTask(Task t) {
+    public Task updateTask(Task t, Long actorId) {
         Task existing = taskRepo.findById(t.getId())
                 .orElseThrow(() -> new IllegalArgumentException("Task not found"));
         Milestone previousMilestone = existing.getMilestone();
+        Task.Status previousStatus = existing.getStatus();
+        Task.Priority previousPriority = existing.getPriority();
+        LocalDate previousDeadline = existing.getDeadline();
+        Long previousAssigneeId = existing.getAssignee() != null ? existing.getAssignee().getId() : null;
+        String previousTitle = existing.getTitle();
         applyTaskChanges(existing, t);
         Task saved = taskRepo.save(existing);
         updateMilestoneCompletion(previousMilestone);
         updateMilestoneCompletion(saved.getMilestone());
+        createActivity(
+                actorId,
+                "task",
+                "Task updated",
+                describeTaskUpdate(saved, previousTitle, previousStatus, previousPriority, previousDeadline, previousAssigneeId, actorId),
+                taskPath(saved)
+        );
         return saved;
     }
     public void deleteTask(Long id) {
@@ -162,7 +216,23 @@ public class AppService {
         c.setContent(content);
         c.setTask(taskRepo.findById(taskId).orElseThrow());
         c.setUser(userRepo.findById(userId).orElseThrow());
-        return commentRepo.save(c);
+        Comment saved = commentRepo.save(c);
+        createActivity(
+                userId,
+                "comment",
+                "Comment added",
+                actorName(userId) + " commented on \"" + saved.getTask().getTitle() + "\"",
+                taskPath(saved.getTask())
+        );
+        return saved;
+    }
+
+    public List<Notification> getActivities(Integer limit) {
+        List<Notification> activities = notificationRepo.findAllByOrderByCreatedAtDesc();
+        if (limit == null || limit <= 0 || activities.size() <= limit) {
+            return activities;
+        }
+        return new ArrayList<>(activities.subList(0, limit));
     }
 
     public void deleteComment(Long taskId, Long commentId, Long userId) {
@@ -221,5 +291,73 @@ public class AppService {
         managedMilestone.setCompleted(!assignedTasks.isEmpty() &&
                 assignedTasks.stream().allMatch(task -> task.getStatus() == Task.Status.DONE));
         milestoneRepo.save(managedMilestone);
+    }
+
+    private void createActivity(Long actorId, String type, String title, String message, String targetPath) {
+        Notification notification = new Notification();
+        notification.setType(type);
+        notification.setTitle(title);
+        notification.setMessage(message);
+        notification.setTargetPath(targetPath);
+        notification.setRead(false);
+        if (actorId != null) {
+            userRepo.findById(actorId).ifPresent(notification::setUser);
+        }
+        notificationRepo.save(notification);
+    }
+
+    private String describeTaskUpdate(Task task,
+                                      String previousTitle,
+                                      Task.Status previousStatus,
+                                      Task.Priority previousPriority,
+                                      LocalDate previousDeadline,
+                                      Long previousAssigneeId,
+                                      Long actorId) {
+        String actor = actorName(actorId);
+        String taskTitle = task.getTitle();
+        if (!Objects.equals(previousStatus, task.getStatus())) {
+            return actor + " moved \"" + taskTitle + "\" to " + formatLabel(task.getStatus().name());
+        }
+        Long currentAssigneeId = task.getAssignee() != null ? task.getAssignee().getId() : null;
+        if (!Objects.equals(previousAssigneeId, currentAssigneeId)) {
+            String assigneeName = task.getAssignee() != null ? task.getAssignee().getName() : "Unassigned";
+            return actor + " reassigned \"" + taskTitle + "\" to " + assigneeName;
+        }
+        if (!Objects.equals(previousDeadline, task.getDeadline())) {
+            return actor + " updated the deadline for \"" + taskTitle + "\"";
+        }
+        if (!Objects.equals(previousPriority, task.getPriority())) {
+            return actor + " changed the priority for \"" + taskTitle + "\" to " + formatLabel(task.getPriority().name());
+        }
+        if (!Objects.equals(previousTitle, task.getTitle())) {
+            return actor + " renamed task to \"" + task.getTitle() + "\"";
+        }
+        return actor + " updated task \"" + taskTitle + "\"";
+    }
+
+    private String actorName(Long actorId) {
+        if (actorId == null) {
+            return "System";
+        }
+        return userRepo.findById(actorId).map(User::getName).orElse("System");
+    }
+
+    private String projectName(Project project) {
+        return project != null ? project.getName() : "Unknown project";
+    }
+
+    private String projectPath(Project project) {
+        return project != null && project.getId() != null ? "/projects/" + project.getId() : "/projects";
+    }
+
+    private String taskPath(Task task) {
+        if (task.getProject() != null && task.getProject().getId() != null) {
+            return "/projects/" + task.getProject().getId();
+        }
+        return "/projects";
+    }
+
+    private String formatLabel(String value) {
+        return value.toLowerCase().replace('_', ' ');
     }
 }
