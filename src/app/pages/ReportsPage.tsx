@@ -13,12 +13,17 @@ type TaskStatus = 'backlog' | 'in_progress' | 'review' | 'done';
 type ReportTaskRow = {
   taskId: string;
   title: string;
+  project: string;
   assignee: string;
   status: string;
   priority: string;
   deadline: string;
-  project: string;
   team: string;
+};
+
+type ReportSummaryRow = {
+  label: string;
+  value: string;
 };
 
 function formatBucketLabel(dateString: string) {
@@ -66,6 +71,11 @@ function formatStatusLabel(status: string) {
 
 function formatPriorityLabel(priority: string) {
   return priority.charAt(0).toUpperCase() + priority.slice(1);
+}
+
+function formatDisplayValue(value: string | null | undefined, fallback: string) {
+  const normalized = value?.trim();
+  return normalized ? normalized : fallback;
 }
 
 function csvEscape(value: string | number) {
@@ -275,6 +285,13 @@ export default function ReportsPage() {
     tasksDue: bucket.tasksDue,
   }));
 
+  const projectFilterLabel = selectedProject === 'all'
+    ? 'All Projects'
+    : filteredProjects[0]?.title || selectedProject;
+  const teamFilterLabel = selectedTeam === 'all'
+    ? 'All Teams'
+    : teams.find((team) => String(team.id) === selectedTeam)?.name || selectedTeam;
+
   const reportTaskRows: ReportTaskRow[] = filteredTasks.map((task) => {
     const project = filteredProjects.find((item) => item.id === task.projectId);
     const user = users.find((item) => item.id === task.assigneeId);
@@ -283,26 +300,42 @@ export default function ReportsPage() {
     return {
       taskId: task.id,
       title: task.title,
-      assignee: user?.name || 'Unassigned',
+      project: formatDisplayValue(project?.title, 'Unknown Project'),
+      assignee: formatDisplayValue(user?.name, 'Unassigned'),
       status: formatStatusLabel(task.status),
       priority: formatPriorityLabel(task.priority),
-      deadline: task.dueDate || '-',
-      project: project?.title || 'Unknown Project',
-      team: team?.name || 'Unassigned Team',
+      deadline: formatDisplayValue(task.dueDate, 'Not set'),
+      team: formatDisplayValue(team?.name, 'Unassigned Team'),
     };
   });
 
+  const reportSummaryRows: ReportSummaryRow[] = [
+    { label: 'Projects in scope', value: String(filteredProjects.length) },
+    { label: 'Tasks in scope', value: String(filteredTasks.length) },
+    { label: 'Completed tasks', value: String(completedTasksCount) },
+    { label: 'Active tasks', value: String(activeTasksCount) },
+    { label: 'Overdue tasks', value: String(overdueTasksCount) },
+    { label: 'Task completion rate', value: `${taskCompletionRate}%` },
+    { label: 'Milestone completion', value: `${milestoneCompletionRate}%` },
+  ];
+
+  const reportAssigneeRows = workloadData.map((item) => ({
+    assignee: item.name,
+    assigned: String(item.assigned),
+    completed: String(item.completed),
+  }));
+
   const handleExportCsv = () => {
     const rows = [
-      ['Task ID', 'Title', 'Assignee', 'Status', 'Priority', 'Deadline', 'Project', 'Team'],
+      ['Task ID', 'Title', 'Project', 'Assignee', 'Status', 'Priority', 'Deadline', 'Team'],
       ...reportTaskRows.map((row) => [
         row.taskId,
         row.title,
+        row.project,
         row.assignee,
         row.status,
         row.priority,
         row.deadline,
-        row.project,
         row.team,
       ]),
     ];
@@ -326,9 +359,15 @@ export default function ReportsPage() {
       }
     };
 
-    const addLine = (text: string, fontSize = 11, fontStyle: 'normal' | 'bold' = 'normal') => {
+    const addLine = (
+      text: string,
+      fontSize = 11,
+      fontStyle: 'normal' | 'bold' = 'normal',
+      color: [number, number, number] = [43, 44, 52],
+    ) => {
       doc.setFont('helvetica', fontStyle);
       doc.setFontSize(fontSize);
+      doc.setTextColor(...color);
       const lines = doc.splitTextToSize(text, contentWidth);
       const height = lines.length * (fontSize + 4);
       ensureSpace(height);
@@ -340,50 +379,145 @@ export default function ReportsPage() {
       y += size;
     };
 
+    const addSectionTitle = (title: string) => {
+      addGap(6);
+      doc.setDrawColor(98, 70, 234);
+      doc.setLineWidth(1.2);
+      ensureSpace(24);
+      doc.line(margin, y, margin + contentWidth, y);
+      y += 16;
+      addLine(title, 14, 'bold');
+      addGap(2);
+    };
+
+    const addSummaryGrid = (rows: ReportSummaryRow[]) => {
+      const columnGap = 16;
+      const cardWidth = (contentWidth - columnGap) / 2;
+      const cardHeight = 54;
+
+      for (let index = 0; index < rows.length; index += 2) {
+        ensureSpace(cardHeight + 10);
+
+        const pair = rows.slice(index, index + 2);
+        pair.forEach((row, pairIndex) => {
+          const x = margin + pairIndex * (cardWidth + columnGap);
+          doc.setFillColor(248, 248, 252);
+          doc.setDrawColor(224, 226, 234);
+          doc.roundedRect(x, y, cardWidth, cardHeight, 8, 8, 'FD');
+          doc.setFont('helvetica', 'normal');
+          doc.setFontSize(10);
+          doc.setTextColor(95, 99, 110);
+          doc.text(row.label, x + 12, y + 18);
+          doc.setFont('helvetica', 'bold');
+          doc.setFontSize(16);
+          doc.setTextColor(43, 44, 52);
+          doc.text(row.value, x + 12, y + 40);
+        });
+
+        y += cardHeight + 10;
+      }
+    };
+
+    const addTable = (headers: string[], rows: string[][], columnWidths: number[]) => {
+      const headerHeight = 24;
+      const rowPaddingY = 8;
+      const rowFontSize = 10;
+
+      const drawHeader = () => {
+        ensureSpace(headerHeight + 8);
+        let currentX = margin;
+        doc.setFillColor(43, 44, 52);
+        doc.setTextColor(255, 255, 255);
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(10);
+
+        headers.forEach((header, index) => {
+          const width = columnWidths[index];
+          doc.rect(currentX, y, width, headerHeight, 'F');
+          doc.text(header, currentX + 6, y + 16);
+          currentX += width;
+        });
+
+        y += headerHeight;
+      };
+
+      drawHeader();
+
+      rows.forEach((row, rowIndex) => {
+        const wrappedCells = row.map((cell, index) =>
+          doc.splitTextToSize(cell, columnWidths[index] - 12),
+        );
+        const rowHeight = Math.max(
+          ...wrappedCells.map((lines) => lines.length * (rowFontSize + 2) + rowPaddingY * 2),
+          28,
+        );
+
+        if (y + rowHeight > pageHeight - margin) {
+          doc.addPage();
+          y = margin;
+          drawHeader();
+        }
+
+        let currentX = margin;
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(rowFontSize);
+        doc.setTextColor(43, 44, 52);
+
+        wrappedCells.forEach((cellLines, index) => {
+          const width = columnWidths[index];
+          doc.setFillColor(rowIndex % 2 === 0 ? 255 : 248);
+          doc.setDrawColor(224, 226, 234);
+          doc.rect(currentX, y, width, rowHeight, 'FD');
+          doc.text(cellLines, currentX + 6, y + rowPaddingY + 10);
+          currentX += width;
+        });
+
+        y += rowHeight;
+      });
+    };
+
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(18);
+    doc.setTextColor(43, 44, 52);
+    doc.setFontSize(20);
     doc.text('Project Management Report', margin, y);
     y += 24;
 
-    addLine(`Generated: ${new Date().toLocaleString()}`);
-    addLine(`Project filter: ${selectedProject === 'all' ? 'All Projects' : filteredProjects[0]?.title || selectedProject}`);
-    addLine(`Team filter: ${selectedTeam === 'all' ? 'All Teams' : teams.find((team) => String(team.id) === selectedTeam)?.name || selectedTeam}`);
-    addGap();
+    addLine(`Generated on ${new Date().toLocaleString()}`, 11, 'normal', [95, 99, 110]);
+    addLine(`Project filter: ${projectFilterLabel}`, 11, 'normal', [95, 99, 110]);
+    addLine(`Team filter: ${teamFilterLabel}`, 11, 'normal', [95, 99, 110]);
+    addGap(8);
 
-    addLine('Summary', 14, 'bold');
-    addLine(`Projects in scope: ${filteredProjects.length}`);
-    addLine(`Tasks in scope: ${filteredTasks.length}`);
-    addLine(`Completed tasks: ${completedTasksCount}`);
-    addLine(`Active tasks: ${activeTasksCount}`);
-    addLine(`Overdue tasks: ${overdueTasksCount}`);
-    addLine(`Milestone completion: ${milestoneCompletionRate}%`);
-    addGap();
+    addSectionTitle('Summary');
+    addSummaryGrid(reportSummaryRows);
 
-    addLine('Tasks by Assignee', 14, 'bold');
-    if (workloadData.length === 0) {
+    addSectionTitle('Tasks by Assignee');
+    if (reportAssigneeRows.length === 0) {
       addLine('No task assignments available for the current filters.');
     } else {
-      workloadData.forEach((item) => {
-        addLine(`${item.name}: ${item.assigned} assigned, ${item.completed} completed`);
-      });
+      addTable(
+        ['Assignee', 'Assigned', 'Completed'],
+        reportAssigneeRows.map((row) => [row.assignee, row.assigned, row.completed]),
+        [contentWidth * 0.58, contentWidth * 0.21, contentWidth * 0.21],
+      );
     }
-    addGap();
 
-    addLine('Task Details', 14, 'bold');
+    addSectionTitle('Task List');
     if (reportTaskRows.length === 0) {
       addLine('No tasks available for the current filters.');
     } else {
-      reportTaskRows.forEach((row, index) => {
-        addLine(`${index + 1}. ${row.title}`, 12, 'bold');
-        addLine(`Task ID: ${row.taskId}`);
-        addLine(`Project: ${row.project}`);
-        addLine(`Team: ${row.team}`);
-        addLine(`Assignee: ${row.assignee}`);
-        addLine(`Status: ${row.status}`);
-        addLine(`Priority: ${row.priority}`);
-        addLine(`Deadline: ${row.deadline}`);
-        addGap(8);
-      });
+      addTable(
+        ['ID', 'Title', 'Project', 'Assignee', 'Status', 'Priority', 'Deadline'],
+        reportTaskRows.map((row) => [
+          row.taskId,
+          row.title,
+          row.project,
+          row.assignee,
+          row.status,
+          row.priority,
+          row.deadline,
+        ]),
+        [32, 120, 110, 95, 70, 58, 57],
+      );
     }
 
     doc.save('project-management-report.pdf');
