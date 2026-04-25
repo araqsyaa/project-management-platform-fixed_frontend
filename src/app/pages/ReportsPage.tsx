@@ -108,6 +108,15 @@ function csvEscape(value: string | number) {
   return text;
 }
 
+function escapeHtml(value: string | number) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 function downloadFile(content: BlobPart, filename: string, type: string) {
   const blob = new Blob([content], { type });
   const url = URL.createObjectURL(blob);
@@ -382,7 +391,80 @@ export default function ReportsPage() {
 
   const handleExportExcel = async () => {
     const rows = buildReportRows(reportTaskRows);
-    const excelContent = rows.map((row) => row.map((cell) => String(cell ?? '').replace(/\t/g, ' ')).join('\t')).join('\n');
+    const headerCells = rows[0]
+      .map((cell) => `<th>${escapeHtml(cell)}</th>`)
+      .join('');
+    const bodyRows = rows
+      .slice(1)
+      .map((row) => `<tr>${row.map((cell) => `<td>${escapeHtml(cell)}</td>`).join('')}</tr>`)
+      .join('');
+
+    const excelContent = `<!DOCTYPE html>
+<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="ProgId" content="Excel.Sheet" />
+    <meta name="Generator" content="Project Management Platform" />
+    <style>
+      body {
+        font-family: Calibri, Arial, sans-serif;
+        color: #2b2c34;
+        margin: 24px;
+      }
+      .report-title {
+        font-size: 18pt;
+        font-weight: 700;
+        margin-bottom: 6px;
+      }
+      .report-meta {
+        font-size: 10pt;
+        color: #5f636e;
+        margin-bottom: 3px;
+      }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        margin-top: 18px;
+      }
+      th, td {
+        border: 1px solid #d8deea;
+        padding: 8px 10px;
+        font-size: 10pt;
+        text-align: left;
+        vertical-align: middle;
+      }
+      th {
+        background: #e9edf4;
+        font-weight: 700;
+      }
+      tr:nth-child(even) td {
+        background: #f8f9fc;
+      }
+      .empty-note {
+        margin-top: 18px;
+        font-size: 10pt;
+        color: #5f636e;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="report-title">Project Management Report</div>
+    <div class="report-meta">Generated on ${escapeHtml(new Date().toLocaleString())}</div>
+    <div class="report-meta">Project filter: ${escapeHtml(projectFilterLabel)}</div>
+    <div class="report-meta">Team filter: ${escapeHtml(teamFilterLabel)}</div>
+    ${reportTaskRows.length === 0
+      ? '<div class="empty-note">No tasks available for the current filters.</div>'
+      : `<table>
+          <thead>
+            <tr>${headerCells}</tr>
+          </thead>
+          <tbody>
+            ${bodyRows}
+          </tbody>
+        </table>`}
+  </body>
+</html>`;
+
     downloadFile(excelContent, 'project-management-report.xls', 'application/vnd.ms-excel;charset=utf-8;');
     await logExportActivity('Excel');
   };
