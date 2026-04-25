@@ -4,6 +4,7 @@ import { FrontendActivity } from '../types/frontend';
 
 export type FrontendProject = ReturnType<typeof mapProject>;
 export type FrontendTask = ReturnType<typeof mapTask>;
+export type FrontendUserSummary = ReturnType<typeof mapUser>;
 
 // Map API types to frontend-compatible format
 function mapProject(p: ApiProject) {
@@ -120,6 +121,114 @@ export function buildProjectProgressSummaryData(
     })
     .sort((a, b) => b.progress - a.progress || b.totalTasks - a.totalTasks || a.title.localeCompare(b.title))
     .slice(0, maxProjects);
+}
+
+export function buildTaskProgressActivityData(
+  tasks: Pick<FrontendTask, 'id' | 'title' | 'projectId' | 'assigneeId' | 'status'>[],
+  projects: Pick<FrontendProject, 'id' | 'title'>[],
+  users: Pick<FrontendUserSummary, 'id' | 'name'>[],
+  maxTasks = 6,
+) {
+  const projectNameMap = projects.reduce<Record<string, string>>((acc, project) => {
+    acc[project.id] = project.title;
+    return acc;
+  }, {});
+
+  const userNameMap = users.reduce<Record<string, string>>((acc, user) => {
+    acc[user.id] = user.name;
+    return acc;
+  }, {});
+
+  const statusWeight: Record<string, number> = {
+    done: 3,
+    review: 2,
+    in_progress: 1,
+    backlog: 0,
+  };
+
+  return tasks
+    .filter((task) => task.status === 'done' || task.status === 'review' || task.status === 'in_progress')
+    .sort((a, b) => {
+      const weightDiff = (statusWeight[b.status] ?? 0) - (statusWeight[a.status] ?? 0);
+      if (weightDiff !== 0) return weightDiff;
+      return Number(b.id) - Number(a.id);
+    })
+    .slice(0, maxTasks)
+    .map((task) => ({
+      id: task.id,
+      taskName: task.title,
+      projectName: projectNameMap[task.projectId] || 'Unknown Project',
+      projectId: task.projectId,
+      assigneeName: userNameMap[task.assigneeId] || 'Unassigned',
+      status: task.status,
+      statusLabel: task.status.replace('_', ' '),
+      targetPath: task.projectId ? `/projects/${task.projectId}` : '/projects',
+    }));
+}
+
+export function buildLifecycleProgressCards(
+  tasks: Pick<FrontendTask, 'id' | 'title' | 'projectId' | 'assigneeId' | 'status'>[],
+  projects: Pick<FrontendProject, 'id' | 'title'>[],
+  users: Pick<FrontendUserSummary, 'id' | 'name'>[],
+  maxTasks = 4,
+) {
+  const projectNameMap = projects.reduce<Record<string, string>>((acc, project) => {
+    acc[project.id] = project.title;
+    return acc;
+  }, {});
+
+  const userNameMap = users.reduce<Record<string, string>>((acc, user) => {
+    acc[user.id] = user.name;
+    return acc;
+  }, {});
+
+  const projectTaskCounts = tasks.reduce<Record<string, { completed: number; remaining: number }>>((acc, task) => {
+    const current = acc[task.projectId] ?? { completed: 0, remaining: 0 };
+    if (task.status === 'done') {
+      current.completed += 1;
+    } else {
+      current.remaining += 1;
+    }
+    acc[task.projectId] = current;
+    return acc;
+  }, {});
+
+  const stageWeight: Record<string, number> = {
+    backlog: 0,
+    in_progress: 1,
+    review: 2,
+    done: 3,
+  };
+
+  const stageLabel: Record<string, string> = {
+    backlog: 'To Do',
+    in_progress: 'In Progress',
+    review: 'Review',
+    done: 'Done',
+  };
+
+  return tasks
+    .sort((a, b) => {
+      const weightDiff = (stageWeight[b.status] ?? 0) - (stageWeight[a.status] ?? 0);
+      if (weightDiff !== 0) return weightDiff;
+      return Number(b.id) - Number(a.id);
+    })
+    .slice(0, maxTasks)
+    .map((task) => {
+      const projectCounts = projectTaskCounts[task.projectId] ?? { completed: 0, remaining: 0 };
+      return {
+        id: task.id,
+        taskName: task.title,
+        projectName: projectNameMap[task.projectId] || 'Unknown Project',
+        projectId: task.projectId,
+        assigneeName: userNameMap[task.assigneeId] || 'Unassigned',
+        stage: task.status,
+        stageLabel: stageLabel[task.status] || task.status,
+        completedTasks: projectCounts.completed,
+        remainingTasks: projectCounts.remaining,
+        targetPath: task.projectId ? `/projects/${task.projectId}` : '/projects',
+      };
+    });
 }
 
 export function buildRecentActivityChartData(

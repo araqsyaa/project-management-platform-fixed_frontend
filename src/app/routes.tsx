@@ -8,6 +8,7 @@ import MilestoneDetailPage from './pages/MilestoneDetailPage';
 import UsersPage from './pages/UsersPage';
 import ReportsPage from './pages/ReportsPage';
 import NotificationsPage from './pages/NotificationsPage';
+import ProgressPage from './pages/ProgressPage';
 import SettingsPage from './pages/SettingsPage';
 import Layout from './components/Layout';
 
@@ -55,6 +56,10 @@ export const router = createBrowserRouter([
       {
         path: 'reports',
         element: <ReportsPage />,
+      },
+      {
+        path: 'progress',
+        element: <ProgressPage />,
       },
       {
         path: 'notifications',
