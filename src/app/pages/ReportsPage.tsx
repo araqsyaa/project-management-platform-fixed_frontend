@@ -4,11 +4,22 @@ import { Button } from '../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-import { FileSpreadsheet, FileText, Download } from 'lucide-react';
+import { FileText, Download } from 'lucide-react';
+import { jsPDF } from 'jspdf';
 import { api, ApiMilestone } from '../api/client';
 import { useProjects, useTasks, useTeams, useUsers } from '../api/useApi';
 
 type TaskStatus = 'backlog' | 'in_progress' | 'review' | 'done';
+type ReportTaskRow = {
+  taskId: string;
+  title: string;
+  assignee: string;
+  status: string;
+  priority: string;
+  deadline: string;
+  project: string;
+  team: string;
+};
 
 function formatBucketLabel(dateString: string) {
   const date = new Date(dateString);
@@ -47,6 +58,34 @@ function isUpcoming(dateString: string, daysAhead = 14) {
 function buildIntegerTicks(maxValue: number) {
   const upperBound = Math.max(1, maxValue);
   return Array.from({ length: upperBound }, (_, index) => index + 1);
+}
+
+function formatStatusLabel(status: string) {
+  return status.replace('_', ' ').replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function formatPriorityLabel(priority: string) {
+  return priority.charAt(0).toUpperCase() + priority.slice(1);
+}
+
+function csvEscape(value: string | number) {
+  const text = String(value ?? '');
+  if (text.includes('"') || text.includes(',') || text.includes('\n')) {
+    return `"${text.replace(/"/g, '""')}"`;
+  }
+  return text;
+}
+
+function downloadFile(content: BlobPart, filename: string, type: string) {
+  const blob = new Blob([content], { type });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
 }
 
 export default function ReportsPage() {
@@ -236,6 +275,120 @@ export default function ReportsPage() {
     tasksDue: bucket.tasksDue,
   }));
 
+  const reportTaskRows: ReportTaskRow[] = filteredTasks.map((task) => {
+    const project = filteredProjects.find((item) => item.id === task.projectId);
+    const user = users.find((item) => item.id === task.assigneeId);
+    const team = teams.find((item) => item.id === project?.teamId);
+
+    return {
+      taskId: task.id,
+      title: task.title,
+      assignee: user?.name || 'Unassigned',
+      status: formatStatusLabel(task.status),
+      priority: formatPriorityLabel(task.priority),
+      deadline: task.dueDate || '-',
+      project: project?.title || 'Unknown Project',
+      team: team?.name || 'Unassigned Team',
+    };
+  });
+
+  const handleExportCsv = () => {
+    const rows = [
+      ['Task ID', 'Title', 'Assignee', 'Status', 'Priority', 'Deadline', 'Project', 'Team'],
+      ...reportTaskRows.map((row) => [
+        row.taskId,
+        row.title,
+        row.assignee,
+        row.status,
+        row.priority,
+        row.deadline,
+        row.project,
+        row.team,
+      ]),
+    ];
+
+    const csv = rows.map((row) => row.map(csvEscape).join(',')).join('\n');
+    downloadFile(csv, 'project-management-report.csv', 'text/csv;charset=utf-8;');
+  };
+
+  const handleExportPdf = () => {
+    const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const margin = 40;
+    const contentWidth = pageWidth - margin * 2;
+    let y = margin;
+
+    const ensureSpace = (neededHeight: number) => {
+      if (y + neededHeight > pageHeight - margin) {
+        doc.addPage();
+        y = margin;
+      }
+    };
+
+    const addLine = (text: string, fontSize = 11, fontStyle: 'normal' | 'bold' = 'normal') => {
+      doc.setFont('helvetica', fontStyle);
+      doc.setFontSize(fontSize);
+      const lines = doc.splitTextToSize(text, contentWidth);
+      const height = lines.length * (fontSize + 4);
+      ensureSpace(height);
+      doc.text(lines, margin, y);
+      y += height;
+    };
+
+    const addGap = (size = 10) => {
+      y += size;
+    };
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(18);
+    doc.text('Project Management Report', margin, y);
+    y += 24;
+
+    addLine(`Generated: ${new Date().toLocaleString()}`);
+    addLine(`Project filter: ${selectedProject === 'all' ? 'All Projects' : filteredProjects[0]?.title || selectedProject}`);
+    addLine(`Team filter: ${selectedTeam === 'all' ? 'All Teams' : teams.find((team) => String(team.id) === selectedTeam)?.name || selectedTeam}`);
+    addGap();
+
+    addLine('Summary', 14, 'bold');
+    addLine(`Projects in scope: ${filteredProjects.length}`);
+    addLine(`Tasks in scope: ${filteredTasks.length}`);
+    addLine(`Completed tasks: ${completedTasksCount}`);
+    addLine(`Active tasks: ${activeTasksCount}`);
+    addLine(`Overdue tasks: ${overdueTasksCount}`);
+    addLine(`Milestone completion: ${milestoneCompletionRate}%`);
+    addGap();
+
+    addLine('Tasks by Assignee', 14, 'bold');
+    if (workloadData.length === 0) {
+      addLine('No task assignments available for the current filters.');
+    } else {
+      workloadData.forEach((item) => {
+        addLine(`${item.name}: ${item.assigned} assigned, ${item.completed} completed`);
+      });
+    }
+    addGap();
+
+    addLine('Task Details', 14, 'bold');
+    if (reportTaskRows.length === 0) {
+      addLine('No tasks available for the current filters.');
+    } else {
+      reportTaskRows.forEach((row, index) => {
+        addLine(`${index + 1}. ${row.title}`, 12, 'bold');
+        addLine(`Task ID: ${row.taskId}`);
+        addLine(`Project: ${row.project}`);
+        addLine(`Team: ${row.team}`);
+        addLine(`Assignee: ${row.assignee}`);
+        addLine(`Status: ${row.status}`);
+        addLine(`Priority: ${row.priority}`);
+        addLine(`Deadline: ${row.deadline}`);
+        addGap(8);
+      });
+    }
+
+    doc.save('project-management-report.pdf');
+  };
+
   if (projectsLoading || tasksLoading || teamsLoading || usersLoading || milestonesLoading) return <div className="p-8">Loading...</div>;
   if (projectsError || tasksError || teamsError || usersError || milestonesError) {
     return <div className="p-8 text-red-500">Error: {projectsError || tasksError || teamsError || usersError || milestonesError}</div>;
@@ -247,17 +400,10 @@ export default function ReportsPage() {
         <h1 className="text-3xl">{t.reports}</h1>
         <div className="flex gap-2">
           <Button 
-            variant="outline" 
-            className="border-foreground/20 hover:bg-transparent hover:opacity-80"
-            style={{ color: '#2CB67D' }}
-          >
-            <FileSpreadsheet className="mr-2 h-4 w-4" />
-            {t.exportToExcel}
-          </Button>
-          <Button 
             variant="outline"
             className="border-foreground/20 hover:bg-transparent hover:opacity-80"
             style={{ color: '#E45858' }}
+            onClick={handleExportPdf}
           >
             <FileText className="mr-2 h-4 w-4" />
             {t.exportToPDF}
@@ -266,6 +412,7 @@ export default function ReportsPage() {
             variant="outline"
             className="border-foreground/20 hover:bg-transparent hover:opacity-80"
             style={{ color: '#6246EA' }}
+            onClick={handleExportCsv}
           >
             <Download className="mr-2 h-4 w-4" />
             {t.exportToCSV}
