@@ -120,6 +120,22 @@ function downloadFile(content: BlobPart, filename: string, type: string) {
   URL.revokeObjectURL(url);
 }
 
+function buildReportRows(reportTaskRows: ReportTaskRow[]) {
+  return [
+    ['Task ID', 'Title', 'Project', 'Assignee', 'Status', 'Priority', 'Deadline', 'Team'],
+    ...reportTaskRows.map((row) => [
+      row.taskId,
+      row.title,
+      row.project,
+      row.assignee,
+      row.status,
+      row.priority,
+      row.deadline,
+      row.team,
+    ]),
+  ];
+}
+
 export default function ReportsPage() {
   const { projects, loading: projectsLoading, error: projectsError, refresh: refreshProjects } = useProjects();
   const { tasks, loading: tasksLoading, error: tasksError, refresh: refreshTasks } = useTasks();
@@ -347,26 +363,31 @@ export default function ReportsPage() {
     completed: String(item.completed),
   }));
 
-  const handleExportCsv = () => {
-    const rows = [
-      ['Task ID', 'Title', 'Project', 'Assignee', 'Status', 'Priority', 'Deadline', 'Team'],
-      ...reportTaskRows.map((row) => [
-        row.taskId,
-        row.title,
-        row.project,
-        row.assignee,
-        row.status,
-        row.priority,
-        row.deadline,
-        row.team,
-      ]),
-    ];
+  const logExportActivity = async (format: 'CSV' | 'PDF' | 'Excel') => {
+    await api.logActivity({
+      type: 'export',
+      title: `${format} report exported`,
+      message: `${format} report exported for ${projectFilterLabel} / ${teamFilterLabel}`,
+      targetPath: '/reports',
+    });
+  };
+
+  const handleExportCsv = async () => {
+    const rows = buildReportRows(reportTaskRows);
 
     const csv = rows.map((row) => row.map(csvEscape).join(',')).join('\n');
     downloadFile(csv, 'project-management-report.csv', 'text/csv;charset=utf-8;');
+    await logExportActivity('CSV');
   };
 
-  const handleExportPdf = () => {
+  const handleExportExcel = async () => {
+    const rows = buildReportRows(reportTaskRows);
+    const excelContent = rows.map((row) => row.map((cell) => String(cell ?? '').replace(/\t/g, ' ')).join('\t')).join('\n');
+    downloadFile(excelContent, 'project-management-report.xls', 'application/vnd.ms-excel;charset=utf-8;');
+    await logExportActivity('Excel');
+  };
+
+  const handleExportPdf = async () => {
     const doc = new jsPDF({ unit: 'pt', format: 'a4', orientation: 'landscape' });
     const pageWidth = doc.internal.pageSize.getWidth();
     const pageHeight = doc.internal.pageSize.getHeight();
@@ -591,6 +612,7 @@ export default function ReportsPage() {
     }
 
     doc.save('project-management-report.pdf');
+    await logExportActivity('PDF');
   };
 
   if (projectsLoading || tasksLoading || teamsLoading || usersLoading || milestonesLoading) return <div className="p-8">Loading...</div>;
@@ -603,6 +625,15 @@ export default function ReportsPage() {
       <div className="flex items-center justify-between">
         <h1 className="text-3xl">{t.reports}</h1>
         <div className="flex gap-2">
+          <Button 
+            variant="outline"
+            className="border-foreground/20 hover:bg-transparent hover:opacity-80"
+            style={{ color: '#2CB67D' }}
+            onClick={handleExportExcel}
+          >
+            <Download className="mr-2 h-4 w-4" />
+            {t.exportToExcel}
+          </Button>
           <Button 
             variant="outline"
             className="border-foreground/20 hover:bg-transparent hover:opacity-80"

@@ -73,12 +73,16 @@ public class ApiController {
     public List<Project> projectsByTeam(@PathVariable Long teamId) { return service.getProjectsByTeam(teamId); }
 
     @PostMapping("/projects")
-    public Project createProject(@RequestBody Project project) { return service.createProject(project); }
+    public Project createProject(@RequestBody Project project, Authentication auth) {
+        Long userId = auth != null ? (Long) auth.getPrincipal() : null;
+        return service.createProject(project, userId);
+    }
 
     @PutMapping("/projects/{id}")
-    public Project updateProject(@PathVariable Long id, @RequestBody Project project) {
+    public Project updateProject(@PathVariable Long id, @RequestBody Project project, Authentication auth) {
         project.setId(id);
-        return service.updateProject(project);
+        Long userId = auth != null ? (Long) auth.getPrincipal() : null;
+        return service.updateProject(project, userId);
     }
 
     @GetMapping("/projects/{projectId}/milestones")
@@ -174,6 +178,18 @@ public class ApiController {
     @GetMapping("/activities")
     public List<Notification> activities(@RequestParam(required = false) Integer limit) {
         return service.getActivities(limit);
+    }
+
+    @PostMapping("/activities")
+    public Notification recordActivity(@RequestBody Map<String, String> body, Authentication auth) {
+        Long userId = auth != null ? (Long) auth.getPrincipal() : null;
+        return service.recordActivity(
+                userId,
+                body.get("type"),
+                body.get("title"),
+                body.get("message"),
+                body.get("targetPath")
+        );
     }
 
     @PostMapping("/tasks/{taskId}/comments")

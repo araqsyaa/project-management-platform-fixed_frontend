@@ -3,7 +3,7 @@ import { t } from '../i18n/translations';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { FolderKanban, ListTodo, Flag, ArrowRight, Bell, MessageSquare, CheckCircle2 } from 'lucide-react';
+import { FolderKanban, ListTodo, Flag, ArrowRight, Bell, MessageSquare, CheckCircle2, Settings, Download } from 'lucide-react';
 import { useNavigate } from 'react-router';
 import { buildProjectProgressMap, useActivities, useMilestones, useProjects, useTasks } from '../api/useApi';
 
@@ -26,6 +26,12 @@ function getActivityIcon(type: string) {
       return MessageSquare;
     case 'milestone':
       return Flag;
+    case 'project':
+      return FolderKanban;
+    case 'settings':
+      return Settings;
+    case 'export':
+      return Download;
     case 'success':
       return CheckCircle2;
     default:

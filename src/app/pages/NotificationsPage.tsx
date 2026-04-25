@@ -2,7 +2,7 @@ import React from 'react';
 import { useNavigate } from 'react-router';
 import { t } from '../i18n/translations';
 import { Card, CardContent } from '../components/ui/card';
-import { Bell, Flag, MessageSquare, CheckCircle2 } from 'lucide-react';
+import { Bell, Flag, MessageSquare, CheckCircle2, FolderKanban, Settings, Download } from 'lucide-react';
 import { useActivities } from '../api/useApi';
 
 function formatTime(timestamp: string) {
@@ -23,6 +23,12 @@ function getActivityIcon(type: string) {
       return MessageSquare;
     case 'milestone':
       return Flag;
+    case 'project':
+      return FolderKanban;
+    case 'settings':
+      return Settings;
+    case 'export':
+      return Download;
     case 'success':
       return CheckCircle2;
     default:
@@ -36,6 +42,12 @@ function getActivityColor(type: string) {
       return '#2B2C34';
     case 'milestone':
       return '#6246EA';
+    case 'project':
+      return '#6246EA';
+    case 'settings':
+      return '#2B2C34';
+    case 'export':
+      return '#2CB67D';
     case 'success':
       return '#2CB67D';
     default:

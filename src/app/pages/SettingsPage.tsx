@@ -11,6 +11,7 @@ import { Separator } from '../components/ui/separator';
 import { User, Mail, Lock, Globe, Save, Eye, EyeOff } from 'lucide-react';
 import { Language } from '../i18n/translations';
 import { toast } from 'sonner';
+import { api } from '../api/client';
 
 export default function SettingsPage() {
   const { user } = useAuth();
@@ -30,7 +31,7 @@ export default function SettingsPage() {
     confirmPassword.length > 0 &&
     newPassword === confirmPassword;
 
-  const handleSaveProfile = () => {
+  const handleSaveProfile = async () => {
     if (!isProfileDirty) {
       toast.error('No changes to save', {
         style: { backgroundColor: '#E45858', color: '#FFFFFE' },
@@ -38,13 +39,25 @@ export default function SettingsPage() {
       return;
     }
 
-    // Here you would normally send the patch to an API.
-    toast.success('Profile updated successfully', {
-      style: { backgroundColor: '#2CB67D', color: '#FFFFFE' },
-    });
+    try {
+      await api.logActivity({
+        type: 'settings',
+        title: 'Profile settings updated',
+        message: `${user?.name || 'User'} updated profile settings`,
+        targetPath: '/settings',
+      });
+      toast.success('Profile updated successfully', {
+        style: { backgroundColor: '#2CB67D', color: '#FFFFFE' },
+      });
+    } catch (error) {
+      console.error(error);
+      toast.error('Failed to record profile update', {
+        style: { backgroundColor: '#E45858', color: '#FFFFFE' },
+      });
+    }
   };
 
-  const handleChangePassword = () => {
+  const handleChangePassword = async () => {
     if (!isChangePasswordValid) {
       toast.error('Enter matching passwords to change password', {
         style: { backgroundColor: '#E45858', color: '#FFFFFE' },
@@ -52,12 +65,26 @@ export default function SettingsPage() {
       return;
     }
 
-    toast.success('Password changed successfully', {
-      style: { backgroundColor: '#2CB67D', color: '#FFFFFE' },
-    });
+    try {
+      await api.logActivity({
+        type: 'settings',
+        title: 'Password changed',
+        message: `${user?.name || 'User'} changed account password`,
+        targetPath: '/settings',
+      });
 
-    setNewPassword('');
-    setConfirmPassword('');
+      toast.success('Password changed successfully', {
+        style: { backgroundColor: '#2CB67D', color: '#FFFFFE' },
+      });
+
+      setNewPassword('');
+      setConfirmPassword('');
+    } catch (error) {
+      console.error(error);
+      toast.error('Failed to record password change', {
+        style: { backgroundColor: '#E45858', color: '#FFFFFE' },
+      });
+    }
   };
 
   return (

@@ -11,7 +11,7 @@ export interface FrontendUser {
 export interface FrontendNotification {
   id: string;
   userId: string;
-  type: 'task' | 'comment' | 'milestone' | 'success' | 'error';
+  type: 'task' | 'comment' | 'milestone' | 'project' | 'settings' | 'export' | 'success' | 'error';
   title: string;
   message: string;
   read: boolean;
@@ -20,7 +20,7 @@ export interface FrontendNotification {
 
 export interface FrontendActivity {
   id: string;
-  type: 'task' | 'comment' | 'milestone' | 'success' | 'error';
+  type: 'task' | 'comment' | 'milestone' | 'project' | 'settings' | 'export' | 'success' | 'error';
   title: string;
   message: string;
   createdAt: string;

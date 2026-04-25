@@ -78,8 +78,37 @@ public class AppService {
     public List<Project> getProjects() { return projectRepo.findAll(); }
     public Optional<Project> getProject(Long id) { return projectRepo.findById(id); }
     public List<Project> getProjectsByTeam(Long teamId) { return projectRepo.findByTeamId(teamId); }
-    public Project createProject(Project p) { return projectRepo.save(p); }
-    public Project updateProject(Project p) { return projectRepo.save(p); }
+    public Project createProject(Project p, Long actorId) {
+        Project saved = projectRepo.save(p);
+        createActivity(
+                actorId,
+                "project",
+                "Project created",
+                actorName(actorId) + " created project \"" + saved.getName() + "\"",
+                projectPath(saved)
+        );
+        return saved;
+    }
+    public Project updateProject(Project p, Long actorId) {
+        Project existing = projectRepo.findById(p.getId())
+                .orElseThrow(() -> new IllegalArgumentException("Project not found"));
+        String previousName = existing.getName();
+        LocalDate previousEndDate = existing.getEndDate();
+        Project saved = projectRepo.save(p);
+        String message = !Objects.equals(previousName, saved.getName())
+                ? actorName(actorId) + " renamed project to \"" + saved.getName() + "\""
+                : !Objects.equals(previousEndDate, saved.getEndDate())
+                    ? actorName(actorId) + " updated the deadline for project \"" + saved.getName() + "\""
+                    : actorName(actorId) + " updated project \"" + saved.getName() + "\"";
+        createActivity(
+                actorId,
+                "project",
+                "Project updated",
+                message,
+                projectPath(saved)
+        );
+        return saved;
+    }
 
     // Milestones
     public List<Milestone> getMilestones(Long projectId) { return milestoneRepo.findByProjectId(projectId); }
@@ -235,6 +264,22 @@ public class AppService {
         return new ArrayList<>(activities.subList(0, limit));
     }
 
+    public Notification recordActivity(Long actorId, String type, String title, String message, String targetPath) {
+        if (title == null || title.isBlank()) {
+            throw new IllegalArgumentException("Activity title is required");
+        }
+        if (message == null || message.isBlank()) {
+            throw new IllegalArgumentException("Activity message is required");
+        }
+        return createActivity(
+                actorId,
+                type != null && !type.isBlank() ? type : "task",
+                title,
+                message,
+                targetPath != null && !targetPath.isBlank() ? targetPath : "/dashboard"
+        );
+    }
+
     public void deleteComment(Long taskId, Long commentId, Long userId) {
         Comment comment = commentRepo.findById(commentId)
                 .filter(existing -> existing.getTask() != null && existing.getTask().getId().equals(taskId))
@@ -293,7 +338,7 @@ public class AppService {
         milestoneRepo.save(managedMilestone);
     }
 
-    private void createActivity(Long actorId, String type, String title, String message, String targetPath) {
+    private Notification createActivity(Long actorId, String type, String title, String message, String targetPath) {
         Notification notification = new Notification();
         notification.setType(type);
         notification.setTitle(title);
@@ -303,7 +348,7 @@ public class AppService {
         if (actorId != null) {
             userRepo.findById(actorId).ifPresent(notification::setUser);
         }
-        notificationRepo.save(notification);
+        return notificationRepo.save(notification);
     }
 
     private String describeTaskUpdate(Task task,

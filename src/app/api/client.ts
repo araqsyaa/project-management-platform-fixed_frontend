@@ -77,6 +77,16 @@ export const api = {
   projects: () => request<ApiProject[]>('/projects'),
   project: (id: string) => request<ApiProject>(`/projects/${id}`),
   activities: (limit?: number) => request<ApiActivity[]>(`/activities${limit ? `?limit=${limit}` : ''}`),
+  logActivity: (payload: {
+    type: string;
+    title: string;
+    message: string;
+    targetPath?: string;
+  }) =>
+    request<ApiActivity>('/activities', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
   createProject: (payload: { name: string; description?: string; teamId?: string; startDate?: string; endDate?: string }) =>
     request<ApiProject>('/projects', {
       method: 'POST',
