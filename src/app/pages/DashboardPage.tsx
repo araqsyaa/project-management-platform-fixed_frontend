@@ -5,7 +5,7 @@ import { Button } from '../components/ui/button';
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { FolderKanban, ListTodo, Flag, TrendingUp, ArrowRight } from 'lucide-react';
 import { useNavigate } from 'react-router';
-import { useMilestones, useProjects, useTasks } from '../api/useApi';
+import { buildProjectProgressMap, useMilestones, useProjects, useTasks } from '../api/useApi';
 
 export default function DashboardPage() {
   const navigate = useNavigate();
@@ -13,6 +13,7 @@ export default function DashboardPage() {
   const { tasks } = useTasks();
   const firstProjectId = projects[0]?.id || '';
   const { milestones } = useMilestones(firstProjectId);
+  const projectProgressMap = buildProjectProgressMap(tasks);
 
   const totalProjects = projects.length;
   const activeTasks = tasks.filter(t => t.status === 'in_progress' || t.status === 'review').length;
@@ -189,7 +190,10 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {projects.slice(0, 4).map((project) => (
+              {projects.slice(0, 4).map((project) => {
+                const projectProgress = projectProgressMap[project.id] ?? 0;
+
+                return (
                 <div 
                   key={project.id} 
                   className="p-4 rounded-lg cursor-pointer hover:opacity-80 transition-opacity"
@@ -198,20 +202,21 @@ export default function DashboardPage() {
                 >
                   <div className="flex items-center justify-between mb-2">
                     <h4 className="font-medium">{project.title}</h4>
-                    <span className="text-sm text-foreground/60">{project.progress}%</span>
+                    <span className="text-sm text-foreground/60">{projectProgress}%</span>
                   </div>
                   <div className="w-full h-2 rounded-full bg-background mb-2">
                     <div 
                       className="h-full rounded-full"
                       style={{ 
-                        width: `${project.progress}%`,
+                        width: `${projectProgress}%`,
                         backgroundColor: '#6246EA'
                       }}
                     />
                   </div>
                   <p className="text-xs text-foreground/60">Due: {project.deadline}</p>
                 </div>
-              ))}
+                );
+              })}
             </div>
           </CardContent>
         </Card>

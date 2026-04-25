@@ -1,6 +1,9 @@
 import { useState, useEffect } from 'react';
 import { api, ApiProject, ApiTask, ApiUser, ApiTeam } from './client';
 
+export type FrontendProject = ReturnType<typeof mapProject>;
+export type FrontendTask = ReturnType<typeof mapTask>;
+
 // Map API types to frontend-compatible format
 function mapProject(p: ApiProject) {
   return {
@@ -43,8 +46,38 @@ function mapTask(t: ApiTask, projectId?: string) {
   };
 }
 
+export function buildProjectProgressMap(tasks: Pick<FrontendTask, 'projectId' | 'status'>[]) {
+  const totals = new Map<string, { total: number; completed: number }>();
+
+  tasks.forEach((task) => {
+    if (!task.projectId) return;
+
+    const current = totals.get(task.projectId) ?? { total: 0, completed: 0 };
+    current.total += 1;
+    if (task.status === 'done') {
+      current.completed += 1;
+    }
+    totals.set(task.projectId, current);
+  });
+
+  return Array.from(totals.entries()).reduce<Record<string, number>>((acc, [projectId, counts]) => {
+    acc[projectId] = counts.total > 0
+      ? Math.round((counts.completed / counts.total) * 100)
+      : 0;
+    return acc;
+  }, {});
+}
+
+export function getProjectProgress(
+  tasks: Pick<FrontendTask, 'projectId' | 'status'>[],
+  projectId?: string,
+) {
+  if (!projectId) return 0;
+  return buildProjectProgressMap(tasks)[projectId] ?? 0;
+}
+
 export function useProjects() {
-  const [data, setData] = useState<ReturnType<typeof mapProject>[]>([]);
+  const [data, setData] = useState<FrontendProject[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -107,7 +140,7 @@ export function useTeams() {
 }
 
 export function useTasks(projectId?: string) {
-  const [data, setData] = useState<ReturnType<typeof mapTask>[]>([]);
+  const [data, setData] = useState<FrontendTask[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 

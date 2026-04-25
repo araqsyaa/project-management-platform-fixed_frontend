@@ -7,7 +7,7 @@ import { Card, CardContent } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { Calendar, Clock, MessageSquare, Send, User, Plus, Pencil, Trash2 } from 'lucide-react';
-import { useProjects, useTasks, useMilestones, useUsers } from '../api/useApi';
+import { getProjectProgress, useProjects, useTasks, useMilestones, useUsers } from '../api/useApi';
 import { api, ApiComment, ApiTask, getStoredUser } from '../api/client';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/ui/dialog';
 import { Input } from '../components/ui/input';
@@ -359,11 +359,7 @@ export default function ProjectDetailPage() {
   tasks.forEach((task) => {
     tasksByStatus[task.status].push(task);
   });
-  const totalTaskCount = tasks.length;
-  const completedTaskCount = tasksByStatus.done.length;
-  const projectProgress = totalTaskCount > 0
-    ? Math.round((completedTaskCount / totalTaskCount) * 100)
-    : 0;
+  const projectProgress = getProjectProgress(tasks, projectId);
 
   const handleSaveTask = async () => {
     if (!projectId || !newTitle.trim()) return;

@@ -7,7 +7,7 @@ import { Card, CardContent } from '../components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Badge } from '../components/ui/badge';
 import { Plus, Search, Filter } from 'lucide-react';
-import { useProjects, useTeams } from '../api/useApi';
+import { buildProjectProgressMap, useProjects, useTasks, useTeams } from '../api/useApi';
 import { api } from '../api/client';
 
 export default function ProjectsPage() {
@@ -15,7 +15,9 @@ export default function ProjectsPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterTeam, setFilterTeam] = useState<string>('all');
   const { projects, loading: projectsLoading, error: projectsError } = useProjects();
+  const { tasks } = useTasks();
   const { teams, loading: teamsLoading } = useTeams();
+  const projectProgressMap = buildProjectProgressMap(tasks);
 
   const [projectList, setProjectList] = useState(projects);
   const [isCreateProjectOpen, setIsCreateProjectOpen] = useState(false);
@@ -123,7 +125,10 @@ export default function ProjectsPage() {
 
       {/* Projects Grid */}
       <div className="grid grid-cols-3 gap-6">
-        {filteredProjects.map((project) => (
+        {filteredProjects.map((project) => {
+          const projectProgress = projectProgressMap[project.id] ?? 0;
+
+          return (
           <Card 
             key={project.id} 
             className="border-foreground/10 cursor-pointer hover:shadow-lg transition-shadow"
@@ -163,13 +168,13 @@ export default function ProjectsPage() {
                 <div>
                   <div className="flex items-center justify-between text-sm mb-2">
                     <span className="text-foreground/60">{t.progress}</span>
-                    <span className="font-medium">{project.progress}%</span>
+                    <span className="font-medium">{projectProgress}%</span>
                   </div>
                   <div className="w-full h-2 rounded-full bg-secondary">
                     <div 
                       className="h-full rounded-full transition-all"
                       style={{ 
-                        width: `${project.progress}%`,
+                        width: `${projectProgress}%`,
                         backgroundColor: '#6246EA'
                       }}
                     />
@@ -178,7 +183,8 @@ export default function ProjectsPage() {
               </div>
             </CardContent>
           </Card>
-        ))}
+          );
+        })}
       </div>
 
       {filteredProjects.length === 0 && (
