@@ -78,6 +78,28 @@ function formatDisplayValue(value: string | null | undefined, fallback: string) 
   return normalized ? normalized : fallback;
 }
 
+function formatReportDate(value: string | null | undefined, fallback = 'Not set') {
+  const normalized = value?.trim();
+  if (!normalized) return fallback;
+
+  const datePortion = normalized.includes('T') ? normalized.split('T')[0] : normalized;
+  const parsed = new Date(`${datePortion}T00:00:00`);
+
+  if (Number.isNaN(parsed.getTime())) {
+    return normalized.replace(/\s+/g, ' ');
+  }
+
+  return parsed.toLocaleDateString('en-US', {
+    month: 'short',
+    day: '2-digit',
+    year: 'numeric',
+  });
+}
+
+function toSingleLine(value: string | null | undefined, fallback: string) {
+  return formatDisplayValue(value?.replace(/\s+/g, ' '), fallback);
+}
+
 function csvEscape(value: string | number) {
   const text = String(value ?? '');
   if (text.includes('"') || text.includes(',') || text.includes('\n')) {
@@ -299,13 +321,13 @@ export default function ReportsPage() {
 
     return {
       taskId: task.id,
-      title: task.title,
-      project: formatDisplayValue(project?.title, 'Unknown Project'),
-      assignee: formatDisplayValue(user?.name, 'Unassigned'),
+      title: toSingleLine(task.title, 'Untitled task'),
+      project: toSingleLine(project?.title, 'Unknown Project'),
+      assignee: toSingleLine(user?.name, 'Unassigned'),
       status: formatStatusLabel(task.status),
       priority: formatPriorityLabel(task.priority),
-      deadline: formatDisplayValue(task.dueDate, 'Not set'),
-      team: formatDisplayValue(team?.name, 'Unassigned Team'),
+      deadline: formatReportDate(task.dueDate, 'Not set'),
+      team: toSingleLine(team?.name, 'Unassigned Team'),
     };
   });
 
@@ -345,10 +367,10 @@ export default function ReportsPage() {
   };
 
   const handleExportPdf = () => {
-    const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+    const doc = new jsPDF({ unit: 'pt', format: 'a4', orientation: 'landscape' });
     const pageWidth = doc.internal.pageSize.getWidth();
     const pageHeight = doc.internal.pageSize.getHeight();
-    const margin = 40;
+    const margin = 36;
     const contentWidth = pageWidth - margin * 2;
     let y = margin;
 
@@ -418,23 +440,56 @@ export default function ReportsPage() {
       }
     };
 
-    const addTable = (headers: string[], rows: string[][], columnWidths: number[]) => {
-      const headerHeight = 24;
-      const rowPaddingY = 8;
-      const rowFontSize = 10;
+    const fitTextToWidth = (text: string, maxWidth: number, fontSize: number, fontStyle: 'normal' | 'bold') => {
+      doc.setFont('helvetica', fontStyle);
+      doc.setFontSize(fontSize);
+
+      const sanitized = text.replace(/\s+/g, ' ').trim();
+      if (!sanitized) return '';
+      if (doc.getTextWidth(sanitized) <= maxWidth) return sanitized;
+
+      const ellipsis = '...';
+      let truncated = sanitized;
+      while (truncated.length > 0 && doc.getTextWidth(`${truncated}${ellipsis}`) > maxWidth) {
+        truncated = truncated.slice(0, -1);
+      }
+
+      return truncated ? `${truncated}${ellipsis}` : ellipsis;
+    };
+
+    const addTable = (
+      columns: Array<{ header: string; width: number; align?: 'left' | 'center' | 'right' }>,
+      rows: string[][],
+    ) => {
+      const headerHeight = 30;
+      const rowHeight = 26;
+      const cellPaddingX = 8;
+      const headerFontSize = 10;
+      const rowFontSize = 9;
 
       const drawHeader = () => {
         ensureSpace(headerHeight + 8);
         let currentX = margin;
-        doc.setFillColor(43, 44, 52);
-        doc.setTextColor(255, 255, 255);
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(10);
+        doc.setLineWidth(0.8);
 
-        headers.forEach((header, index) => {
-          const width = columnWidths[index];
-          doc.rect(currentX, y, width, headerHeight, 'F');
-          doc.text(header, currentX + 6, y + 16);
+        columns.forEach((column) => {
+          const width = column.width;
+          doc.setFillColor(233, 237, 244);
+          doc.setDrawColor(189, 197, 210);
+          doc.rect(currentX, y, width, headerHeight, 'FD');
+          doc.setTextColor(43, 44, 52);
+          doc.setFont('helvetica', 'bold');
+          doc.setFontSize(headerFontSize);
+          const headerText = fitTextToWidth(column.header, width - cellPaddingX * 2, headerFontSize, 'bold');
+          const headerX = column.align === 'right'
+            ? currentX + width - cellPaddingX
+            : column.align === 'center'
+              ? currentX + width / 2
+              : currentX + cellPaddingX;
+          doc.text(headerText, headerX, y + 19, {
+            align: column.align ?? 'left',
+            baseline: 'middle',
+          });
           currentX += width;
         });
 
@@ -444,14 +499,6 @@ export default function ReportsPage() {
       drawHeader();
 
       rows.forEach((row, rowIndex) => {
-        const wrappedCells = row.map((cell, index) =>
-          doc.splitTextToSize(cell, columnWidths[index] - 12),
-        );
-        const rowHeight = Math.max(
-          ...wrappedCells.map((lines) => lines.length * (rowFontSize + 2) + rowPaddingY * 2),
-          28,
-        );
-
         if (y + rowHeight > pageHeight - margin) {
           doc.addPage();
           y = margin;
@@ -463,12 +510,23 @@ export default function ReportsPage() {
         doc.setFontSize(rowFontSize);
         doc.setTextColor(43, 44, 52);
 
-        wrappedCells.forEach((cellLines, index) => {
-          const width = columnWidths[index];
-          doc.setFillColor(rowIndex % 2 === 0 ? 255 : 248);
+        row.forEach((cell, index) => {
+          const column = columns[index];
+          const width = column.width;
+          const isEvenRow = rowIndex % 2 === 0;
+          doc.setFillColor(isEvenRow ? 255 : 248, isEvenRow ? 255 : 249, isEvenRow ? 255 : 252);
           doc.setDrawColor(224, 226, 234);
           doc.rect(currentX, y, width, rowHeight, 'FD');
-          doc.text(cellLines, currentX + 6, y + rowPaddingY + 10);
+
+          const fittedText = fitTextToWidth(cell, width - cellPaddingX * 2, rowFontSize, 'normal');
+          if (column.align === 'right') {
+            doc.text(fittedText, currentX + width - cellPaddingX, y + 17, { align: 'right' });
+          } else if (column.align === 'center') {
+            doc.text(fittedText, currentX + width / 2, y + 17, { align: 'center' });
+          } else {
+            doc.text(fittedText, currentX + cellPaddingX, y + 17);
+          }
+
           currentX += width;
         });
 
@@ -494,10 +552,14 @@ export default function ReportsPage() {
     if (reportAssigneeRows.length === 0) {
       addLine('No task assignments available for the current filters.');
     } else {
+      const assigneeColumns = [
+        { header: 'Assignee', width: contentWidth * 0.58 },
+        { header: 'Assigned', width: contentWidth * 0.21, align: 'center' as const },
+        { header: 'Completed', width: contentWidth * 0.21, align: 'center' as const },
+      ];
       addTable(
-        ['Assignee', 'Assigned', 'Completed'],
+        assigneeColumns,
         reportAssigneeRows.map((row) => [row.assignee, row.assigned, row.completed]),
-        [contentWidth * 0.58, contentWidth * 0.21, contentWidth * 0.21],
       );
     }
 
@@ -505,8 +567,17 @@ export default function ReportsPage() {
     if (reportTaskRows.length === 0) {
       addLine('No tasks available for the current filters.');
     } else {
+      const taskColumns = [
+        { header: 'ID', width: contentWidth * 0.08 },
+        { header: 'Title', width: contentWidth * 0.24 },
+        { header: 'Project', width: contentWidth * 0.18 },
+        { header: 'Assignee', width: contentWidth * 0.15 },
+        { header: 'Status', width: contentWidth * 0.12 },
+        { header: 'Priority', width: contentWidth * 0.1 },
+        { header: 'Deadline', width: contentWidth * 0.13 },
+      ];
       addTable(
-        ['ID', 'Title', 'Project', 'Assignee', 'Status', 'Priority', 'Deadline'],
+        taskColumns,
         reportTaskRows.map((row) => [
           row.taskId,
           row.title,
@@ -516,7 +587,6 @@ export default function ReportsPage() {
           row.priority,
           row.deadline,
         ]),
-        [32, 120, 110, 95, 70, 58, 57],
       );
     }
 
